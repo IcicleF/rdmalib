@@ -15,3 +15,7 @@ Software:
 * C++17 compiler
 * MLNX OFED (`libibverbs`)
 * OpenMPI
+
+## Usage
+
+`g++ ... -lrdmalib -libverbs`

@@ -14,7 +14,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Configure MPI
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
-add_library(gjma
+add_library(rdmalib
     context.cpp
     cluster.cpp
     peer.cpp
@@ -23,4 +23,4 @@ add_library(gjma
 
 add_executable(hello test/hello.cpp)
 target_include_directories(hello PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries(hello gjma ibverbs ${MPI_CXX_LIBRARIES})
+target_link_libraries(hello rdmalib ibverbs ${MPI_CXX_LIBRARIES})
