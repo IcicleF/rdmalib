@@ -21,6 +21,13 @@ add_library(rdmalib
     connection.cpp
 )
 
-add_executable(hello test/hello.cpp)
-target_include_directories(hello PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries(hello rdmalib ibverbs ${MPI_CXX_LIBRARIES})
+# Test application
+option(TESTAPP "Compile an rdmalib test" OFF)
+
+if (TESTAPP)
+    message(STATUS "[rdmalib] Compile a simple test app.")
+    add_executable(hello test/hello.cpp)
+    target_include_directories(hello PRIVATE ${CMAKE_SOURCE_DIR})
+    target_link_libraries(hello rdmalib ibverbs ${MPI_CXX_LIBRARIES})
+else (TESTAPP)
+endif (TESTAPP)
