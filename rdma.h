@@ -28,7 +28,7 @@ public:
     /**
      * @brief Maximum number of allowed connections between any pair of peers.
      */
-    static const int MaxConnectionsPerPeer = 16;
+    static const int MaxConnectionsPerPeer = 32;
 };
 
 class Context;

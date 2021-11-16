@@ -12,10 +12,6 @@ Hardware & OS:
 
 Software:
 
-* C++17 compiler
-* MLNX OFED (`libibverbs`)
-* OpenMPI
-
-## Usage
-
-`g++ ... -lrdmalib -libverbs`
+* C++17 compiler (`g++ 7.5.0-3ubuntu1`)
+* MLNX OFED (`libibverbs`, `mlx5_0`)
+* OpenMPI (`2.1.1`)
