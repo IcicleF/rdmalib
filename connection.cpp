@@ -235,7 +235,7 @@ int Connection::post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delt
     wr.ext_op.masked_atomics.remote_addr = dst;
     wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
     wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = delta << lowest_bit;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = highest_bit;
+    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = 1ull << highest_bit;
 
     return ibv_exp_post_send(this->qp, &wr, &bad_wr);
 }
