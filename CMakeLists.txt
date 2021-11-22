@@ -28,10 +28,11 @@ endif ()
 
 # Compile library
 add_library(rdmalib
-    context.cpp
-    cluster.cpp
-    peer.cpp
-    connection.cpp
+    impl/context.cpp
+    impl/cluster.cpp
+    impl/peer.cpp
+
+    impl/rc/rc.cpp
 )
 
 # Test application
