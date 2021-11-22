@@ -14,6 +14,19 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Configure MPI
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
+# Check RNIC version
+execute_process(
+    COMMAND lspci
+    COMMAND grep "Mellanox"
+    OUTPUT_VARIABLE NIC_VER_CHECK
+)
+if (NIC_VER_CHECK MATCHES ".*\[ConnectX-[5-9]\].*")
+else ()
+    message(FATAL_ERROR "rdmalib only runs with Mellanox ConnectX-5/6 RNICs. Abort.")
+    return()
+endif ()
+
+# Compile library
 add_library(rdmalib
     context.cpp
     cluster.cpp
@@ -29,5 +42,5 @@ if (TESTAPP)
     add_executable(hello test/hello.cpp)
     target_include_directories(hello PRIVATE ${CMAKE_SOURCE_DIR})
     target_link_libraries(hello rdmalib ibverbs ${MPI_CXX_LIBRARIES})
-else (TESTAPP)
-endif (TESTAPP)
+else ()
+endif ()
