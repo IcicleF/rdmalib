@@ -41,7 +41,7 @@ Cluster::~Cluster()
     this->ctx->refcnt.fetch_sub(1);
 }
 
-void Cluster::connect(int connections)
+void Cluster::connect(int connections, ConnectionType type)
 {
     bool _connected = false;
     if (!this->connected.compare_exchange_strong(_connected, true))

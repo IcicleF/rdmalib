@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "rdma_base.h"
+#include "rc/rc.h"
 
 namespace rdma
 {
