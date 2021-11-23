@@ -1,20 +1,20 @@
+#include <mpi.h>
 #include <cstdio>
 #include <cstdlib>
-#include <mpi.h>
 
-#include "rdma_base.h"
+#include "cluster.h"
+#include "context.h"
+#include "peer.h"
 
-namespace rdma
-{
+namespace rdma {
 
-Cluster::Cluster(Context &ctx): connected(false)
-{
+Cluster::Cluster(Context &ctx) : connected(false) {
     int rc;
     rc = MPI_Comm_size(MPI_COMM_WORLD, &this->n);
     if (rc != MPI_SUCCESS) {
         throw std::runtime_error("cannot get MPI_Comm_size");
     }
-    
+
     rc = MPI_Comm_rank(MPI_COMM_WORLD, &this->id);
     if (rc != MPI_SUCCESS) {
         throw std::runtime_error("cannot get MPI_Comm_rank");
@@ -25,8 +25,7 @@ Cluster::Cluster(Context &ctx): connected(false)
     this->ctx = &ctx;
 }
 
-Cluster::~Cluster()
-{
+Cluster::~Cluster() {
     if (this->peers.size()) {
         for (int i = 0; i < this->n; ++i) {
             if (i == this->id)
@@ -41,8 +40,8 @@ Cluster::~Cluster()
     this->ctx->refcnt.fetch_sub(1);
 }
 
-void Cluster::connect(int connections, ConnectionType type)
-{
+void Cluster::connect(int connections, ConnectionConfig config) {
+    // Allow only once
     bool _connected = false;
     if (!this->connected.compare_exchange_strong(_connected, true))
         return;
@@ -53,7 +52,7 @@ void Cluster::connect(int connections, ConnectionType type)
         if (i == this->id)
             continue;
 
-        this->peers[i] = new Peer(*this, i, connections);
+        this->peers[i] = new Peer(*this, i, config);
     }
 
     // Before proceeding, barrier to ensure all peers are ready
@@ -66,7 +65,7 @@ void Cluster::connect(int connections, ConnectionType type)
     for (int i = 0; i < this->n; ++i) {
         if (i == id)
             continue;
-        
+
         my_qp_info[i].num_qps = connections;
         this->ctx->fill_exchange(&my_qp_info[i]);
         this->peers[i]->fill_exchange(&my_qp_info[i]);
@@ -84,14 +83,14 @@ void Cluster::connect(int connections, ConnectionType type)
         send_displs[i] = recv_displs[i] = i;
     }
 
-    MPI_Alltoallv(my_qp_info, send_cnts, send_displs, XchgQPInfoTy,
-        remote_qp_info, recv_cnts, recv_displs, XchgQPInfoTy, MPI_COMM_WORLD);
+    MPI_Alltoallv(my_qp_info, send_cnts, send_displs, XchgQPInfoTy, remote_qp_info, recv_cnts,
+                  recv_displs, XchgQPInfoTy, MPI_COMM_WORLD);
 
     // Establish RDMA connection
     for (int i = 0; i < this->n; ++i) {
         if (i == id)
             continue;
-        
+
         this->peers[i]->establish(&remote_qp_info[i]);
     }
 
@@ -99,21 +98,19 @@ void Cluster::connect(int connections, ConnectionType type)
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-void Cluster::sync()
-{
+void Cluster::sync() {
     int rc = MPI_Barrier(MPI_COMM_WORLD);
     if (rc != MPI_SUCCESS)
         throw std::runtime_error("failed to sync");
-    asm volatile ("" ::: "memory");
+    asm volatile("" ::: "memory");
 }
 
-int Cluster::verbose() const
-{
+int Cluster::verbose() const {
     fprintf(stderr, "[node %d] *** VERBOSE ***\n", this->id);
     for (int i = 0; i < this->n; ++i) {
         if (i == this->id)
             continue;
-        
+
         int rc = this->peers[i]->verbose();
         if (rc) {
             fprintf(stderr, "[node %d] *** VERBOSE: halt, detected issue ***\n", this->id);
@@ -123,4 +120,4 @@ int Cluster::verbose() const
     return 0;
 }
 
-}
+}  // namespace rdma

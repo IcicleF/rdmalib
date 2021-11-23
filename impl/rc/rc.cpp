@@ -1,12 +1,11 @@
 #include <cstdio>
 #include <cstdlib>
+
 #include "rc.h"
 
-namespace rdma
-{
-    
-Connection::Connection(Peer &peer, int id)
-{
+namespace rdma {
+
+ReliableConnection::ReliableConnection(Peer &peer, int id) {
     this->ctx = peer.ctx;
     this->ctx->refcnt.fetch_add(1);
     this->cluster = peer.cluster;
@@ -20,8 +19,7 @@ Connection::Connection(Peer &peer, int id)
     this->create_qp();
 }
 
-Connection::~Connection()
-{
+ReliableConnection::~ReliableConnection() {
     ibv_destroy_qp(this->qp);
     ibv_destroy_cq(this->send_cq);
     ibv_destroy_cq(this->recv_cq);
@@ -30,11 +28,7 @@ Connection::~Connection()
     this->ctx->refcnt.fetch_sub(1);
 }
 
-int Connection::post_read(void *dst, uintptr_t src, size_t size, bool signaled, int wr_id)
-{
-    if (__glibc_unlikely(this->qp->qp_type != IBV_QPT_RC))
-        throw std::runtime_error("post read to non-RC QP");
-
+int ReliableConnection::post_read(void *dst, uintptr_t src, size_t size, bool signaled, int wr_id) {
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
     sge.addr = reinterpret_cast<uintptr_t>(dst);
@@ -54,11 +48,8 @@ int Connection::post_read(void *dst, uintptr_t src, size_t size, bool signaled, 
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_write(uintptr_t dst, void const *src, size_t size, bool signaled, int wr_id)
-{
-    if (__glibc_unlikely(this->qp->qp_type != IBV_QPT_RC))
-        throw std::runtime_error("post write to non-RC QP");
-
+int ReliableConnection::post_write(uintptr_t dst, void const *src, size_t size, bool signaled,
+                                   int wr_id) {
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
     sge.addr = reinterpret_cast<uintptr_t>(src);
@@ -78,8 +69,7 @@ int Connection::post_write(uintptr_t dst, void const *src, size_t size, bool sig
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_send(void const *src, size_t size, bool signaled, int wr_id)
-{
+int ReliableConnection::post_send(void const *src, size_t size, bool signaled, int wr_id) {
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
     sge.addr = reinterpret_cast<uintptr_t>(src);
@@ -97,8 +87,7 @@ int Connection::post_send(void const *src, size_t size, bool signaled, int wr_id
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_recv(void *dst, size_t size, int wr_id)
-{
+int ReliableConnection::post_recv(void *dst, size_t size, int wr_id) {
     ibv_recv_wr wr, *bad_wr;
     ibv_sge sge;
     sge.addr = reinterpret_cast<uintptr_t>(dst);
@@ -113,11 +102,8 @@ int Connection::post_recv(void *dst, size_t size, int wr_id)
     return ibv_post_recv(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire, bool signaled, int wr_id)
-{
-    if (__glibc_unlikely(this->qp->qp_type != IBV_QPT_RC))
-        throw std::runtime_error("post atomic CAS to non-RC QP");
-
+int ReliableConnection::post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire,
+                                        bool signaled, int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
         throw std::runtime_error("post atomic CAS to non-aligned address");
 
@@ -142,11 +128,8 @@ int Connection::post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire, 
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_atomic_fa(uintptr_t dst, void *before, uint64_t delta, bool signaled, int wr_id)
-{
-    if (__glibc_unlikely(this->qp->qp_type != IBV_QPT_RC))
-        throw std::runtime_error("post atomic FA to non-RC QP");
-
+int ReliableConnection::post_atomic_fa(uintptr_t dst, void *before, uint64_t delta, bool signaled,
+                                       int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
         throw std::runtime_error("post atomic FA to non-aligned address");
 
@@ -170,12 +153,9 @@ int Connection::post_atomic_fa(uintptr_t dst, void *before, uint64_t delta, bool
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_masked_atomic_cas(uintptr_t dst, void *expected, uint64_t expected_mask, 
-                                        uint64_t desire, uint64_t desire_mask, bool signaled, int wr_id)
-{
-    if (__glibc_unlikely(this->qp->qp_type != IBV_QPT_RC))
-        throw std::runtime_error("post masked atomic FA to non-RC QP");
-
+int ReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *expected,
+                                               uint64_t expected_mask, uint64_t desire,
+                                               uint64_t desire_mask, bool signaled, int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
         throw std::runtime_error("post masked atomic FA to non-aligned address");
 
@@ -195,10 +175,11 @@ int Connection::post_masked_atomic_cas(uintptr_t dst, void *expected, uint64_t e
     if (signaled)
         wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 
-    wr.ext_op.masked_atomics.log_arg_sz = 3;    // log(sizeof(uint64_t))
+    wr.ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
     wr.ext_op.masked_atomics.remote_addr = dst;
     wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_val = *(reinterpret_cast<uint64_t *>(expected));
+    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_val =
+        *(reinterpret_cast<uint64_t *>(expected));
     wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_mask = expected_mask;
     wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_val = desire;
     wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_mask = desire_mask;
@@ -206,12 +187,9 @@ int Connection::post_masked_atomic_cas(uintptr_t dst, void *expected, uint64_t e
     return ibv_exp_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delta, int highest_bit, int lowest_bit,
-                                        bool signaled, int wr_id)
-{
-    if (__glibc_unlikely(this->qp->qp_type != IBV_QPT_RC))
-        throw std::runtime_error("post masked atomic FA to non-RC QP");
-
+int ReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delta,
+                                              int highest_bit, int lowest_bit, bool signaled,
+                                              int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
         throw std::runtime_error("post masked atomic FA to non-aligned address");
 
@@ -231,7 +209,7 @@ int Connection::post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delt
     if (signaled)
         wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
 
-    wr.ext_op.masked_atomics.log_arg_sz = 3;    // log(sizeof(uint64_t))
+    wr.ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
     wr.ext_op.masked_atomics.remote_addr = dst;
     wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
     wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = delta << lowest_bit;
@@ -240,8 +218,7 @@ int Connection::post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delt
     return ibv_exp_post_send(this->qp, &wr, &bad_wr);
 }
 
-int Connection::poll_send_cq(int n)
-{
+int ReliableConnection::poll_send_cq(int n) {
     ibv_wc wc_arr[32];
 
     for (int i = 0; i < n; i += 32) {
@@ -258,8 +235,7 @@ int Connection::poll_send_cq(int n)
     return n;
 }
 
-int Connection::poll_send_cq(ibv_wc *wc_arr, int n)
-{
+int ReliableConnection::poll_send_cq(ibv_wc *wc_arr, int n) {
     int res = 0;
     while (n > res) {
         res += ibv_poll_cq(this->send_cq, n - res, wc_arr + res);
@@ -270,8 +246,7 @@ int Connection::poll_send_cq(ibv_wc *wc_arr, int n)
     return res;
 }
 
-int Connection::poll_send_cq_once(ibv_wc *wc_arr, int n)
-{
+int ReliableConnection::poll_send_cq_once(ibv_wc *wc_arr, int n) {
     int res = ibv_poll_cq(this->send_cq, n, wc_arr);
     for (int j = 0; j < res; ++j)
         if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
@@ -279,8 +254,7 @@ int Connection::poll_send_cq_once(ibv_wc *wc_arr, int n)
     return res;
 }
 
-int Connection::poll_recv_cq(int n)
-{
+int ReliableConnection::poll_recv_cq(int n) {
     ibv_wc wc_arr[32];
 
     for (int i = 0; i < n; i += 32) {
@@ -297,8 +271,7 @@ int Connection::poll_recv_cq(int n)
     return n;
 }
 
-int Connection::poll_recv_cq(ibv_wc *wc_arr, int n)
-{
+int ReliableConnection::poll_recv_cq(ibv_wc *wc_arr, int n) {
     int res = 0;
     while (n > res) {
         res += ibv_poll_cq(this->recv_cq, n - res, wc_arr + res);
@@ -309,8 +282,7 @@ int Connection::poll_recv_cq(ibv_wc *wc_arr, int n)
     return res;
 }
 
-int Connection::poll_recv_cq_once(ibv_wc *wc_arr, int n)
-{
+int ReliableConnection::poll_recv_cq_once(ibv_wc *wc_arr, int n) {
     int res = ibv_poll_cq(this->recv_cq, n, wc_arr);
     for (int j = 0; j < res; ++j)
         if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
@@ -318,13 +290,14 @@ int Connection::poll_recv_cq_once(ibv_wc *wc_arr, int n)
     return res;
 }
 
-int Connection::verbose() const
-{
-    static char const *qpt_str[] = { "?type", "?type", "RC", "UC", "UD", "XRC" };
-    static char const *stat_str[] = { "reset", "init", "rtr", "rts ok!", "sqd", "sqe", "error", "?state" };
+int ReliableConnection::verbose() const {
+    static char const *qpt_str[] = {"?type", "?type", "RC", "UC", "UD", "XRC"};
+    static char const *stat_str[] = {"reset", "init", "rtr",   "rts ok!",
+                                     "sqd",   "sqe",  "error", "?state"};
 
-    fprintf(stderr, "  [node %d, peer %d] conn %d: ", this->cluster->whoami(), this->peer->id, this->id);
-    
+    fprintf(stderr, "  [node %d, peer %d] conn %d: ", this->cluster->whoami(), this->peer->id,
+            this->id);
+
     int rc;
     ibv_qp_init_attr init_attr;
     ibv_qp_attr attr;
@@ -340,14 +313,12 @@ int Connection::verbose() const
     return 0;
 }
 
-int Connection::create_cq(ibv_cq **cq, int cq_depth)
-{
+int ReliableConnection::create_cq(ibv_cq **cq, int cq_depth) {
     *cq = ibv_create_cq(this->ctx->ctx, cq_depth, nullptr, nullptr, 0);
     return errno;
 }
 
-int Connection::create_qp(ibv_qp_type qp_type, int qp_depth)
-{
+int ReliableConnection::create_qp(ibv_qp_type qp_type, int qp_depth) {
     ibv_exp_qp_init_attr init_attr;
     memset(&init_attr, 0, sizeof(ibv_exp_qp_init_attr));
 
@@ -358,13 +329,11 @@ int Connection::create_qp(ibv_qp_type qp_type, int qp_depth)
     init_attr.pd = this->ctx->pd;
 
     if (qp_type == IBV_QPT_RC) {
-        init_attr.comp_mask = IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS | 
-                              IBV_EXP_QP_INIT_ATTR_PD | 
+        init_attr.comp_mask = IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS | IBV_EXP_QP_INIT_ATTR_PD |
                               IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
-        init_attr.exp_create_flags = IBV_EXP_QP_CREATE_EC_PARITY_EN;    // Enable EC
-        init_attr.max_atomic_arg = sizeof(uint64_t);                    // Enable extended atomics
-    }
-    else {
+        init_attr.exp_create_flags = IBV_EXP_QP_CREATE_EC_PARITY_EN;  // Enable EC
+        init_attr.max_atomic_arg = sizeof(uint64_t);                  // Enable extended atomics
+    } else {
         init_attr.comp_mask = IBV_EXP_QP_INIT_ATTR_PD;
     }
 
@@ -377,22 +346,19 @@ int Connection::create_qp(ibv_qp_type qp_type, int qp_depth)
     return errno;
 }
 
-void Connection::fill_exchange(OOBExchange *xchg)
-{
+void ReliableConnection::fill_exchange(OOBExchange *xchg) {
     if (this->qp == nullptr)
         throw std::runtime_error("filling OOBExchange with null QP");
     xchg->qpn[this->id] = this->qp->qp_num;
 }
 
-void Connection::establish(uint8_t *gid, int lid, uint32_t qpn)
-{
+void ReliableConnection::establish(uint8_t *gid, int lid, uint32_t qpn) {
     this->modify_to_init();
     this->modify_to_rtr(gid, lid, qpn);
     this->modify_to_rts();
 }
 
-void Connection::modify_to_init()
-{
+void ReliableConnection::modify_to_init() {
     ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
 
@@ -402,9 +368,8 @@ void Connection::modify_to_init()
 
     switch (qp->qp_type) {
     case IBV_QPT_RC:
-        attr.qp_access_flags = IBV_ACCESS_REMOTE_READ |
-                                IBV_ACCESS_REMOTE_WRITE |
-                                IBV_ACCESS_REMOTE_ATOMIC;
+        attr.qp_access_flags =
+            IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
         break;
     case IBV_QPT_UC:
         attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
@@ -415,12 +380,12 @@ void Connection::modify_to_init()
         throw std::runtime_error("unrecognized QP type " + std::to_string(qp->qp_type));
     }
 
-    if (ibv_modify_qp(qp, &attr, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS))
+    if (ibv_modify_qp(qp, &attr,
+                      IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS))
         throw std::runtime_error("failed to modify QP to init");
 }
 
-void Connection::modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn)
-{
+void ReliableConnection::modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn) {
     ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
 
@@ -452,8 +417,7 @@ void Connection::modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn)
         throw std::runtime_error("failed to modify QP to RTR");
 }
 
-void Connection::modify_to_rts()
-{
+void ReliableConnection::modify_to_rts() {
     ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
 
@@ -473,4 +437,4 @@ void Connection::modify_to_rts()
         throw std::runtime_error("failed to modify QP to RTS");
 }
 
-}
+}  // namespace rdma

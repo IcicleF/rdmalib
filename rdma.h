@@ -4,4 +4,4 @@
 #include "impl/rc/rc.h"
 #include "impl/xrc/xrc.h"
 
-#endif // __RDMA_H__    
+#endif  // __RDMA_H__

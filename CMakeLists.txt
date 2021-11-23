@@ -22,7 +22,7 @@ execute_process(
 )
 if (NIC_VER_CHECK MATCHES ".*\[ConnectX-[5-9]\].*")
 else ()
-    message(FATAL_ERROR "rdmalib only runs with Mellanox ConnectX-5/6 RNICs. Abort.")
+    message(FATAL_ERROR "rdmalib only runs with Mellanox ConnectX-5+ RNICs. Abort.")
     return()
 endif ()
 
@@ -36,7 +36,7 @@ add_library(rdmalib
 )
 
 # Test application
-option(TESTAPP "Compile an rdmalib test" OFF)
+option(TESTAPP "Compile an rdmalib test app" OFF)
 
 if (TESTAPP)
     message(STATUS "[rdmalib] Compile a simple test app.")
