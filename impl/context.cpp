@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <cstdio>
 #include <cstdlib>
 
@@ -9,7 +10,7 @@ Context::Context(char const *dev_name) : nmrs(0), refcnt(0) {
     int n_devices;
     ibv_device **dev_list = ibv_get_device_list(&n_devices);
     if (!n_devices || !dev_list)
-        throw std::runtime_error("cannot find any RDMA device");
+        Emergency::abort("cannot find any RDMA device");
 
     int target = -1;
     if (dev_name == nullptr)
@@ -22,7 +23,7 @@ Context::Context(char const *dev_name) : nmrs(0), refcnt(0) {
             }
     }
     if (target < 0)
-        throw std::runtime_error("cannot find device: " + std::string(dev_name));
+        Emergency::abort("cannot find device: " + std::string(dev_name));
 
     ibv_context *ctx = ibv_open_device(dev_list[target]);
     ibv_free_device_list(dev_list);
@@ -32,7 +33,15 @@ Context::Context(char const *dev_name) : nmrs(0), refcnt(0) {
     ibv_query_port(this->ctx, 1, &this->port_attr);
     ibv_query_gid(this->ctx, 1, 1, &this->gid);
 
+    // Protected Domain
     this->pd = ibv_alloc_pd(ctx);
+
+    // XRC Domain
+    ibv_xrcd_init_attr xrcd_init_attr;
+    xrcd_init_attr.fd = -1;
+    xrcd_init_attr.oflags = O_CREAT;
+    xrcd_init_attr.comp_mask = IBV_XRCD_INIT_ATTR_FD | IBV_XRCD_INIT_ATTR_OFLAGS;
+    this->xrcd = ibv_open_xrcd(ctx, &xrcd_init_attr);
 }
 
 Context::~Context() {
@@ -41,7 +50,11 @@ Context::~Context() {
         return;
     }
 
-    for (int i = 0; i < nmrs; ++i) ibv_dereg_mr(this->mrs[i]);
+    // MR -> XRCD -> PD -> Context
+    for (int i = 0; i < this->nmrs; ++i)
+        ibv_dereg_mr(this->mrs[i]);
+    ibv_close_xrcd(this->xrcd);
+    ibv_dealloc_pd(this->pd);
     ibv_close_device(this->ctx);
 }
 
@@ -93,13 +106,6 @@ void Context::check_dev_attr() {
 
     if (!check_bit(dev_attr.exp_device_cap_flags, IBV_EXP_DEVICE_EC_OFFLOAD))
         fprintf(stderr, "ibv_exp: NIC does not support EC offload\n");
-}
-
-void Context::fill_exchange(OOBExchange *xchg) {
-    xchg->lid = this->port_attr.lid;
-    xchg->num_mrs = this->nmrs;
-    for (int i = 0; i < xchg->num_mrs; ++i) xchg->mr[i] = *(this->mrs[i]);
-    memcpy(xchg->gid, &this->gid, sizeof(ibv_gid));
 }
 
 }  // namespace rdma

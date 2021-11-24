@@ -18,11 +18,9 @@ class Cluster {
   public:
     /**
      * @brief Construct a Cluster object basing on an RDMA context.
-     * The construction is allowed for only once. Further attempts will throw
-     * `std::runtime_error`.
+     * The construction is allowed for only once. Further attempts will kill the process.
      *
-     * @warning MPI context must be already set-up for a Cluster to be
-     * constructed.
+     * @warning MPI context must be already set-up for a Cluster to be constructed.
      */
     explicit Cluster(Context &ctx);
 
@@ -46,14 +44,12 @@ class Cluster {
      * @brief Synchronize among all peers and establish full RDMA connections.
      * No RPC wrappings are provided. In case of RPC needs, use eRPC instead.
      * This method is allowed to be called only once. Further attempts will
-     * throw `std::runtime_error`.
+     * kill the process.
      *
-     * @param connections Number of connections between each pair of peers.
-     * Default to 1.
-     * @param type Type of the connection. Currently, only RC and XRC are
-     * supported.
+     * @param num_rc Number of RDMA RC connection(s) to establish.
+     * @param num_xrc Number of RDMA XRC connection(s) to establish.
      */
-    void connect(int connections = 1, ConnectionConfig config = {1, 0});
+    void establish(int num_rc = 1, int num_xrc = 0);
 
     /**
      * @brief Synchronize among all peers with MPI_Barrier.
@@ -76,28 +72,20 @@ class Cluster {
 
     /**
      * @brief Get the reference of peer with certain MPI rank.
-     * Throw `std::runtime_error` if the rank is myself's rank.
+     * Dies if the rank is myself's rank.
      *
      * @param id The ID (MPI rank) of the peer.
      * @return Peer& Object reference representing the remote peer.
      */
     inline Peer &peer(int id) const { return *peers[id]; }
 
-    /**
-     * @brief Locally asks all peer connections to verbose themselves.
-     * @note This function is completely local incurs no RDMA nor Ethernet
-     * traffic.
-     *
-     * @return int 0 if no issues found, errno otherwise.
-     */
-    int verbose() const;
-
   private:
     Context *ctx;
     int n;
     int id;
-    std::atomic<bool> connected;
     std::vector<Peer *> peers;
+
+    std::atomic<bool> connected;
 };
 
 }  // namespace rdma

@@ -53,9 +53,9 @@ class ReliableConnection {
     int create_qp(ibv_qp_type qp_type = IBV_QPT_RC, int qp_depth = MaxQueueDepth);
 
     void fill_exchange(OOBExchange *xchg);
-    void establish(uint8_t *gid, int lid, uint32_t qpn);
+    void establish(ibv_gid gid, int lid, uint32_t qpn);
     void modify_to_init();
-    void modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn);
+    void modify_to_rtr(ibv_gid gid, int lid, uint32_t qpn);
     void modify_to_rts();
 
     static const int InitPSN = 3185;

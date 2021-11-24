@@ -105,7 +105,7 @@ int ReliableConnection::post_recv(void *dst, size_t size, int wr_id) {
 int ReliableConnection::post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire,
                                         bool signaled, int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
-        throw std::runtime_error("post atomic CAS to non-aligned address");
+        Emergency::abort("post atomic CAS to non-aligned address");
 
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -131,7 +131,7 @@ int ReliableConnection::post_atomic_cas(uintptr_t dst, void *expected, uint64_t 
 int ReliableConnection::post_atomic_fa(uintptr_t dst, void *before, uint64_t delta, bool signaled,
                                        int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
-        throw std::runtime_error("post atomic FA to non-aligned address");
+        Emergency::abort("post atomic FA to non-aligned address");
 
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -157,7 +157,7 @@ int ReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *expected,
                                                uint64_t expected_mask, uint64_t desire,
                                                uint64_t desire_mask, bool signaled, int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
-        throw std::runtime_error("post masked atomic FA to non-aligned address");
+        Emergency::abort("post masked atomic FA to non-aligned address");
 
     ibv_exp_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -191,7 +191,7 @@ int ReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *before, uint6
                                               int highest_bit, int lowest_bit, bool signaled,
                                               int wr_id) {
     if (__glibc_unlikely((dst & 0x7) != 0))
-        throw std::runtime_error("post masked atomic FA to non-aligned address");
+        Emergency::abort("post masked atomic FA to non-aligned address");
 
     ibv_exp_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -230,7 +230,7 @@ int ReliableConnection::poll_send_cq(int n) {
         }
         for (int j = 0; j < m; ++j)
             if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-                throw std::runtime_error("wc failure: " + std::to_string(wc_arr[j].status));
+                Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     }
     return n;
 }
@@ -242,7 +242,7 @@ int ReliableConnection::poll_send_cq(ibv_wc *wc_arr, int n) {
     }
     for (int j = 0; j < n; ++j)
         if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-            throw std::runtime_error("wc failure: " + std::to_string(wc_arr[j].status));
+            Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     return res;
 }
 
@@ -250,7 +250,7 @@ int ReliableConnection::poll_send_cq_once(ibv_wc *wc_arr, int n) {
     int res = ibv_poll_cq(this->send_cq, n, wc_arr);
     for (int j = 0; j < res; ++j)
         if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-            throw std::runtime_error("wc failure: " + std::to_string(wc_arr[j].status));
+            Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     return res;
 }
 
@@ -266,7 +266,7 @@ int ReliableConnection::poll_recv_cq(int n) {
         }
         for (int j = 0; j < m; ++j)
             if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-                throw std::runtime_error("wc failure: " + std::to_string(wc_arr[j].status));
+                Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     }
     return n;
 }
@@ -278,7 +278,7 @@ int ReliableConnection::poll_recv_cq(ibv_wc *wc_arr, int n) {
     }
     for (int j = 0; j < n; ++j)
         if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-            throw std::runtime_error("wc failure: " + std::to_string(wc_arr[j].status));
+            Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     return res;
 }
 
@@ -286,7 +286,7 @@ int ReliableConnection::poll_recv_cq_once(ibv_wc *wc_arr, int n) {
     int res = ibv_poll_cq(this->recv_cq, n, wc_arr);
     for (int j = 0; j < res; ++j)
         if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-            throw std::runtime_error("wc failure: " + std::to_string(wc_arr[j].status));
+            Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     return res;
 }
 
@@ -306,7 +306,7 @@ int ReliableConnection::verbose() const {
 
     rc = ibv_query_qp(this->qp, &attr, IBV_QP_STATE, &init_attr);
     if (rc)
-        throw std::runtime_error("failed to perform ibv_query_qp");
+        Emergency::abort("failed to perform ibv_query_qp");
     fprintf(stderr, "%s %s\n", qpt_str[this->qp->qp_type], stat_str[attr.qp_state]);
     if (attr.qp_state != IBV_QPS_RTS)
         return -1;
@@ -348,11 +348,11 @@ int ReliableConnection::create_qp(ibv_qp_type qp_type, int qp_depth) {
 
 void ReliableConnection::fill_exchange(OOBExchange *xchg) {
     if (this->qp == nullptr)
-        throw std::runtime_error("filling OOBExchange with null QP");
-    xchg->qpn[this->id] = this->qp->qp_num;
+        Emergency::abort("filling OOBExchange with null QP");
+    xchg->rc_qp_num[this->id] = this->qp->qp_num;
 }
 
-void ReliableConnection::establish(uint8_t *gid, int lid, uint32_t qpn) {
+void ReliableConnection::establish(ibv_gid gid, int lid, uint32_t qpn) {
     this->modify_to_init();
     this->modify_to_rtr(gid, lid, qpn);
     this->modify_to_rts();
@@ -375,17 +375,17 @@ void ReliableConnection::modify_to_init() {
         attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE;
         break;
     case IBV_EXP_QPT_DC_INI:
-        throw std::runtime_error("QP type DC_INI not implemented");
+        Emergency::abort("QP type DC_INI not implemented");
     default:
-        throw std::runtime_error("unrecognized QP type " + std::to_string(qp->qp_type));
+        Emergency::abort("unrecognized QP type " + std::to_string(qp->qp_type));
     }
 
     if (ibv_modify_qp(qp, &attr,
                       IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS))
-        throw std::runtime_error("failed to modify QP to init");
+        Emergency::abort("failed to modify QP to init");
 }
 
-void ReliableConnection::modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn) {
+void ReliableConnection::modify_to_rtr(ibv_gid gid, int lid, uint32_t qpn) {
     ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
 
@@ -399,7 +399,7 @@ void ReliableConnection::modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn) {
     attr.ah_attr.src_path_bits = 0;
     attr.ah_attr.port_num = 1;
     attr.ah_attr.is_global = 1;
-    memcpy(&attr.ah_attr.grh.dgid, gid, sizeof(ibv_gid));
+    memcpy(&attr.ah_attr.grh.dgid, &gid, sizeof(ibv_gid));
     attr.ah_attr.grh.flow_label = 0;
     attr.ah_attr.grh.hop_limit = 1;
     attr.ah_attr.grh.sgid_index = 1;
@@ -414,7 +414,7 @@ void ReliableConnection::modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn) {
     }
 
     if (ibv_modify_qp(qp, &attr, flags))
-        throw std::runtime_error("failed to modify QP to RTR");
+        Emergency::abort("failed to modify QP to RTR");
 }
 
 void ReliableConnection::modify_to_rts() {
@@ -434,7 +434,7 @@ void ReliableConnection::modify_to_rts() {
     }
 
     if (ibv_modify_qp(qp, &attr, flags))
-        throw std::runtime_error("failed to modify QP to RTS");
+        Emergency::abort("failed to modify QP to RTS");
 }
 
 }  // namespace rdma

@@ -6,6 +6,36 @@
 namespace rdma {
 
 /**
+ * @brief Inner structure for out-of-band QP information exchange.
+ */
+class OOBExchange {
+    friend class Peer;
+    friend class ReliableConnection;
+    friend class ExtendedReliableConnection;
+
+    // RDMA context info
+    ibv_gid gid;
+    uint16_t lid;
+
+    // RDMA MRs (for single-sided verbs)
+    int num_mr;
+    ibv_mr mr[Consts::MaxMrs];
+
+    // RDMA RC connection QP info
+    int num_rc;
+    uint32_t rc_qp_num[Consts::MaxConnections];
+
+    // RDMA XRC connection dual-direction QP + recv SRQ info
+    int num_xrc;
+    uint32_t xrc_ini_qp_num[Consts::MaxConnections];
+    uint32_t xrc_tgt_qp_num[Consts::MaxConnections];
+    uint32_t xrc_srq_num[Consts::MaxConnections];
+
+  private:
+    explicit OOBExchange() { memset(this, 0, sizeof(OOBExchange)); }
+};
+
+/**
  * @brief Represents a remote node that has RDMA connection with me.
  * I may have multiple connections with a peer.
  */
@@ -55,15 +85,14 @@ class Peer {
      * @deprecated Because of the introduction of XRC, this method has been deprecated to avoid
      * misunderstand.
      */
-    inline ReliableConnection &connection(int id = 0) const { return this->rc(id); }
-
-    int verbose() const;
+    inline ReliableConnection &connection(int id = 0) const __attribute_deprecated__ {
+        return this->rc(id);
+    }
 
   private:
-    explicit Peer(Cluster &cluster, int id, ConnectionConfig config);
+    explicit Peer(Cluster &cluster, int id);
 
-    void fill_exchange(OOBExchange *xchg);
-    void establish(OOBExchange *remote_xchg);
+    void establish(int num_rc, int num_xrc);
 
     /**
      * @brief Match a given remote address range to MR and return its rkey.
@@ -99,7 +128,7 @@ class Peer {
                 return this->remote_mrs[0].rkey;
             [[fallthrough]];
         default:
-            throw std::runtime_error("cannot match remote mr");
+            Emergency::abort("cannot match remote mr");
         }
     }
 
@@ -113,7 +142,6 @@ class Peer {
     Cluster *cluster;
     Context *ctx;
     int id;
-    int nconns;
     int nrmrs;
     std::array<ibv_mr, Consts::MaxMrs> remote_mrs;
 

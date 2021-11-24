@@ -36,10 +36,6 @@ class Context {
      */
     Context(Context &&) = delete;
 
-    /**
-     * @brief On destruction, there may be no references to the RDMA context.
-     * Otherwise, throw `std::runtime_error`.
-     */
     ~Context();
 
     /**
@@ -116,7 +112,7 @@ class Context {
                 return this->mrs[0]->lkey;
             [[fallthrough]];
         default:
-            throw std::runtime_error("cannot match local mr");
+            Emergency::abort("cannot match local mr");
         }
     }
 
@@ -127,13 +123,12 @@ class Context {
         return this->match_mr_lkey(reinterpret_cast<void *>(addr), size);
     }
 
-    void fill_exchange(OOBExchange *xchg);
-
     ibv_exp_device_attr device_attr;
     ibv_port_attr port_attr;
     ibv_context *ctx;
     ibv_gid gid;
     ibv_pd *pd;
+    ibv_xrcd *xrcd;
 
     int nmrs = 0;
     std::array<ibv_mr *, Consts::MaxMrs> mrs;
