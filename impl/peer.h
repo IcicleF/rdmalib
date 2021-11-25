@@ -23,13 +23,13 @@ class OOBExchange {
 
     // RDMA RC connection QP info
     int num_rc;
-    uint32_t rc_qp_num[Consts::MaxConnections];
+    uint32_t rc_qp_num[Consts::MaxThreads * Consts::MaxThreads];
 
     // RDMA XRC connection dual-direction QP + recv SRQ info
     int num_xrc;
-    uint32_t xrc_ini_qp_num[Consts::MaxConnections];
-    uint32_t xrc_tgt_qp_num[Consts::MaxConnections];
-    uint32_t xrc_srq_num[Consts::MaxConnections];
+    uint32_t xrc_ini_qp_num[Consts::MaxThreads];
+    uint32_t xrc_tgt_qp_num[Consts::MaxThreads];
+    uint32_t xrc_srq_num[Consts::MaxThreads];
 
   private:
     explicit OOBExchange() { memset(this, 0, sizeof(OOBExchange)); }
@@ -61,20 +61,31 @@ class Peer {
      */
     ~Peer();
 
-    inline std::pair<uintptr_t, size_t> remote_mr(int id) const {
+    inline std::pair<uintptr_t, size_t> remote_mr(int id) const
+    {
         return {reinterpret_cast<uintptr_t>(this->remote_mrs[id].addr),
                 this->remote_mrs[id].length};
     }
 
     /**
-     * @brief Get the reference of an RDMA reliable connection with certain ID.
-     * If the ID is not specified, return the first reliable connection.
+     * @brief Get the reference of an RDMA RC connection with certain ID.
+     * If the ID is not specified, return the first RC connection.
      *
-     * @param id The ID of the RDMA reliable connection.
+     * @param id The ID of the RDMA RC connection.
      * @return ReliableConnection& Object reference representing the RDMA
-     * reliable connection.
+     * RC connection.
      */
     inline ReliableConnection &rc(int id = 0) const { return *rcs[id]; }
+
+    /**
+     * @brief Get the reference of an RDMA XRC end with certain ID.
+     * If the ID is not specified, return the first XRC end.
+     *
+     * @param id The ID of the RDMA XRC end.
+     * @return ExtendedReliableConnection& Object reference representing the RDMA
+     * XRC end.
+     */
+    inline ExtendedReliableConnection &xrc(int id = 0) const { return *xrcs[id]; }
 
     /**
      * @brief Get the reference of connection with certain ID.
@@ -85,7 +96,8 @@ class Peer {
      * @deprecated Because of the introduction of XRC, this method has been deprecated to avoid
      * misunderstand.
      */
-    inline ReliableConnection &connection(int id = 0) const __attribute_deprecated__ {
+    inline ReliableConnection &connection(int id = 0) const __attribute_deprecated__
+    {
         return this->rc(id);
     }
 
@@ -97,7 +109,8 @@ class Peer {
     /**
      * @brief Match a given remote address range to MR and return its rkey.
      */
-    inline uint32_t match_remote_mr_rkey(void const *addr, size_t size = 0) const {
+    inline uint32_t match_remote_mr_rkey(void const *addr, size_t size = 0) const
+    {
         switch (this->nrmrs) {
         case 4:
             if (addr >= this->remote_mrs[3].addr &&
@@ -135,7 +148,8 @@ class Peer {
     /**
      * @brief Match a given remote address range to MR and return its rkey.
      */
-    inline uint32_t match_remote_mr_rkey(uintptr_t addr, size_t size = 0) const {
+    inline uint32_t match_remote_mr_rkey(uintptr_t addr, size_t size = 0) const
+    {
         return this->match_remote_mr_rkey(reinterpret_cast<void *>(addr), size);
     }
 
@@ -147,6 +161,7 @@ class Peer {
 
     std::vector<ReliableConnection *> rcs;
     std::vector<ExtendedReliableConnection *> xrcs;
+    std::vector<uint32_t> xrc_srq_nums;
 };
 
 }  // namespace rdma

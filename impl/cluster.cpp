@@ -8,7 +8,8 @@
 
 namespace rdma {
 
-Cluster::Cluster(Context &ctx) : connected(false) {
+Cluster::Cluster(Context &ctx) : connected(false)
+{
     int rc;
     rc = MPI_Comm_size(MPI_COMM_WORLD, &this->n);
     if (rc != MPI_SUCCESS) {
@@ -33,7 +34,8 @@ Cluster::Cluster(Context &ctx) : connected(false) {
     }
 }
 
-Cluster::~Cluster() {
+Cluster::~Cluster()
+{
     for (int i = 0; i < this->n; ++i) {
         if (this->peers[i])
             delete this->peers[i];
@@ -44,7 +46,8 @@ Cluster::~Cluster() {
     this->ctx->refcnt.fetch_sub(1);
 }
 
-void Cluster::establish(int num_rc, int num_xrc) {
+void Cluster::establish(int num_rc, int num_xrc)
+{
     // Check validity
     if (num_rc < 0 || num_xrc < 0 || (num_rc == 0 && num_xrc == 0)) {
         Emergency::abort("no connections to establush");
@@ -69,7 +72,8 @@ void Cluster::establish(int num_rc, int num_xrc) {
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-void Cluster::sync() {
+void Cluster::sync()
+{
     int rc = MPI_Barrier(MPI_COMM_WORLD);
     if (rc != MPI_SUCCESS)
         Emergency::abort("failed to sync");

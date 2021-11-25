@@ -6,7 +6,8 @@
 
 namespace rdma {
 
-Context::Context(char const *dev_name) : nmrs(0), refcnt(0) {
+Context::Context(char const *dev_name) : nmrs(0), refcnt(0)
+{
     int n_devices;
     ibv_device **dev_list = ibv_get_device_list(&n_devices);
     if (!n_devices || !dev_list)
@@ -44,7 +45,8 @@ Context::Context(char const *dev_name) : nmrs(0), refcnt(0) {
     this->xrcd = ibv_open_xrcd(ctx, &xrcd_init_attr);
 }
 
-Context::~Context() {
+Context::~Context()
+{
     if (refcnt.load() > 0) {
         fprintf(stderr, "destructing RDMA context with dependency!\n");
         return;
@@ -58,7 +60,8 @@ Context::~Context() {
     ibv_close_device(this->ctx);
 }
 
-int Context::reg_mr(void *addr, size_t size, int perm) {
+int Context::reg_mr(void *addr, size_t size, int perm)
+{
     if (this->nmrs >= Consts::MaxMrs)
         return -1;
 
@@ -70,11 +73,13 @@ int Context::reg_mr(void *addr, size_t size, int perm) {
     return this->nmrs++;
 }
 
-int Context::reg_mr(uintptr_t addr, size_t size, int perm) {
+int Context::reg_mr(uintptr_t addr, size_t size, int perm)
+{
     return this->reg_mr(reinterpret_cast<void *>(addr), size, perm);
 }
 
-void Context::check_dev_attr() {
+void Context::check_dev_attr()
+{
     ibv_exp_device_attr dev_attr;
     memset(&dev_attr, 0, sizeof(ibv_exp_device_attr));
 

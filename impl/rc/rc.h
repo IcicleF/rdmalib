@@ -43,14 +43,12 @@ class ReliableConnection {
 
     int verbose() const;
 
-    static const int MaxQueueDepth = 256;
-
   private:
     explicit ReliableConnection(Peer &peer, int id);
     ~ReliableConnection();
 
-    int create_cq(ibv_cq **cq, int cq_depth = MaxQueueDepth);
-    int create_qp(ibv_qp_type qp_type = IBV_QPT_RC, int qp_depth = MaxQueueDepth);
+    int create_cq(ibv_cq **cq, int cq_depth = Consts::MaxQueueDepth);
+    int create_qp(int qp_depth = Consts::MaxQueueDepth);
 
     void fill_exchange(OOBExchange *xchg);
     void establish(ibv_gid gid, int lid, uint32_t qpn);

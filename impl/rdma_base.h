@@ -29,10 +29,15 @@ class Consts {
     static const int MaxPeers = 256;
 
     /**
-     * @brief Maximum number of allowed connections between any pair of peers of any connection
-     * type.
+     * @brief Maximum number of allowed threads on each node.
+     * rdmalib allows `MaxThread * MaxThread` RCs and `MaxThreads` XRCs per node.
      */
-    static const int MaxConnections = 32;
+    static const int MaxThreads = 16;
+
+    /**
+     * @brief Maximum number of outstanding WR/CQE of each QP/SRQ/CQ.
+     */
+    static const int MaxQueueDepth = 256;
 };
 
 class Context;
@@ -49,7 +54,8 @@ class Emergency {
     friend class ReliableConnection;
     friend class ExtendedReliableConnection;
 
-    [[noreturn]] inline static void abort(const std::string &message, int retval = -1) {
+    [[noreturn]] inline static void abort(const std::string &message, int retval = -1)
+    {
         int rank;
         int rc = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         if (rc != MPI_SUCCESS)

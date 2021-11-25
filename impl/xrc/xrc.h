@@ -8,7 +8,15 @@
 namespace rdma {
 
 /**
- * @brief Represent an RDMA XRC connection.
+ * @brief Represent an end of RDMA XRC connection.
+ * RDMA XRC is unidirectional. Therefore, an instance of `ExtendedReliableConnection` simultaneously
+ * serves as (1) a per-thread initiator end, (2) a counterpart end of a remote initiator, and (3) a
+ * per-thread receiver end. It is NOT a thread-to-thread connection.
+ *
+ * For example, suppose there are two nodes, both running 8 threads and want to communicate with
+ * each other. With rdmalib, each node would have to create 8 * 8 = 64 `ReliableConnection`
+ * instances with RDMA RC, but only need to create 8 `ExtendedReliableConnection` instances with
+ * RDMA XRC.
  */
 class ExtendedReliableConnection {
     friend class Peer;
@@ -21,7 +29,8 @@ class ExtendedReliableConnection {
     int post_read(void *dst, uintptr_t src, size_t size, bool signaled = false, int wr_id = 0);
     int post_write(uintptr_t dst, void const *src, size_t size, bool signaled = false,
                    int wr_id = 0);
-    int post_send(void const *src, size_t size, bool signaled = false, int wr_id = 0);
+    int post_send(void const *src, size_t size, int remote_id = 0, bool signaled = false,
+                  int wr_id = 0);
     int post_recv(void *dst, size_t size, int wr_id = 0);
 
     int post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire, bool signaled = false,
@@ -43,19 +52,20 @@ class ExtendedReliableConnection {
 
     int verbose() const;
 
-    static const int MaxQueueDepth = 256;
-
   private:
     explicit ExtendedReliableConnection(Peer &peer, int id);
     ~ExtendedReliableConnection();
 
-    int create_cq(ibv_cq **cq, int cq_depth = MaxQueueDepth);
-    int create_qp(ibv_qp_type qp_type = IBV_QPT_RC, int qp_depth = MaxQueueDepth);
+    int create_cq(ibv_cq **cq, int cq_depth = Consts::MaxQueueDepth);
+    int create_srq(ibv_srq **srq, ibv_cq *cq, int srq_depth = Consts::MaxQueueDepth);
+    int create_qp(ibv_qp **qp, ibv_qp_type type, ibv_cq *send_cq, ibv_cq *recv_cq,
+                  int qp_depth = Consts::MaxQueueDepth);
 
     void fill_exchange(OOBExchange *xchg);
-    void establish(uint8_t *gid, int lid, uint32_t qpn);
+    void establish(ibv_gid gid, int lid, uint32_t ini_qp_num, uint32_t tgt_qp_num);
+
     void modify_to_init();
-    void modify_to_rtr(uint8_t *gid, int lid, uint32_t qpn);
+    void modify_to_rtr(ibv_qp *qp, ibv_gid gid, int lid, uint32_t qp_num);
     void modify_to_rts();
 
     static const int InitPSN = 3185;
@@ -64,9 +74,14 @@ class ExtendedReliableConnection {
     Cluster *cluster;
     Peer *peer;
     int id;
-    ibv_qp *qp;
-    ibv_cq *send_cq;
-    ibv_cq *recv_cq;
+
+    ibv_qp *ini_qp;  // Initiator (belongs to this thread)
+    ibv_qp *tgt_qp;  // Counterpart of remote initiator (DOES NOT belong to this thread)
+    ibv_srq *srq;    // SRQ (belongs to this thread)
+
+    ibv_cq *send_cq;         // Initiator side CQ
+    ibv_cq *recv_cq;         // Receiver (SRQ) side CQ
+    ibv_cq *placeholder_cq;  // Initiator's recv & Receiver's send
 };
 
 }  // namespace rdma

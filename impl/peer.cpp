@@ -9,7 +9,8 @@
 
 namespace rdma {
 
-Peer::Peer(Cluster &cluster, int id) {
+Peer::Peer(Cluster &cluster, int id)
+{
     this->ctx = cluster.ctx;
     this->ctx->refcnt.fetch_add(1);
 
@@ -17,7 +18,8 @@ Peer::Peer(Cluster &cluster, int id) {
     this->id = id;
 }
 
-Peer::~Peer() {
+Peer::~Peer()
+{
     if (this->rcs.size()) {
         for (size_t i = 0; i < this->rcs.size(); ++i)
             delete this->rcs[i];
@@ -34,7 +36,8 @@ Peer::~Peer() {
     this->ctx->refcnt.fetch_sub(1);
 }
 
-void Peer::establish(int num_rc, int num_xrc) {
+void Peer::establish(int num_rc, int num_xrc)
+{
     // Initiate connections
     this->rcs.assign(num_rc, nullptr);
     for (int i = 0; i < num_rc; ++i)
@@ -61,7 +64,8 @@ void Peer::establish(int num_rc, int num_xrc) {
         this->rcs[i]->fill_exchange(&xchg);
 
     xchg.num_xrc = num_xrc;
-    // TODO: fill in XRC
+    for (int i = 0; i < num_xrc; ++i)
+        this->xrcs[i]->fill_exchange(&xchg);
 
     // Exchange connection metadata
     MPI_Status mpirc;
@@ -70,11 +74,22 @@ void Peer::establish(int num_rc, int num_xrc) {
     if (rc != MPI_SUCCESS || mpirc.MPI_ERROR != MPI_SUCCESS)
         Emergency::abort("cannot perform MPI_Sendrecv with peer " + std::to_string(this->id));
 
+    // Store remote MR
+    this->nrmrs = remote_xchg.num_mr;
+    for (int i = 0; i < this->nrmrs; ++i)
+        this->remote_mrs[i] = remote_xchg.mr[i];
+
+    // Store remote XRC SRQ nums
+    this->xrc_srq_nums.assign(num_xrc, 0);
+    for (int i = 0; i < num_xrc; ++i)
+        this->xrc_srq_nums[i] = remote_xchg.xrc_srq_num[i];
+
     // Connect
     for (int i = 0; i < num_rc; ++i)
         this->rcs[i]->establish(remote_xchg.gid, remote_xchg.lid, remote_xchg.rc_qp_num[i]);
-
-    // TODO: connect XRC
+    for (int i = 0; i < num_xrc; ++i)
+        this->xrcs[i]->establish(remote_xchg.gid, remote_xchg.lid, remote_xchg.xrc_ini_qp_num[i],
+                                 remote_xchg.xrc_tgt_qp_num[i]);
 }
 
 }  // namespace rdma

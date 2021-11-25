@@ -14,7 +14,9 @@ namespace rdma {
 class Context {
     friend class Cluster;
     friend class Peer;
+
     friend class ReliableConnection;
+    friend class ExtendedReliableConnection;
 
   public:
     /**
@@ -85,7 +87,8 @@ class Context {
     /**
      * @brief Match a given address range to MR and return its lkey.
      */
-    inline uint32_t match_mr_lkey(void const *addr, size_t size = 0) const {
+    inline uint32_t match_mr_lkey(void const *addr, size_t size = 0) const
+    {
         switch (this->nmrs) {
         case 4:
             if (addr >= this->mrs[3]->addr &&
@@ -119,7 +122,8 @@ class Context {
     /**
      * @brief Match a given address range to MR and return its lkey.
      */
-    inline int match_mr_lkey(uintptr_t addr, size_t size = 0) const {
+    inline int match_mr_lkey(uintptr_t addr, size_t size = 0) const
+    {
         return this->match_mr_lkey(reinterpret_cast<void *>(addr), size);
     }
 
