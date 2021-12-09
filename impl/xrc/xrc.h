@@ -33,14 +33,13 @@ class ExtendedReliableConnection {
                   int wr_id = 0);
     int post_recv(void *dst, size_t size, int wr_id = 0);
 
-    int post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire, bool signaled = false,
+    int post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled = false,
                         int wr_id = 0);
-    int post_atomic_fa(uintptr_t dst, void *before, uint64_t delta, bool signaled = false,
+    int post_atomic_fa(uintptr_t dst, void *fetch, uint64_t add, bool signaled = false,
                        int wr_id = 0);
-    int post_masked_atomic_cas(uintptr_t dst, void *expected, uint64_t expected_mask,
-                               uint64_t desire, uint64_t desire_mask, bool signaled = false,
-                               int wr_id = 0);
-    int post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delta, int highest_bit = 63,
+    int post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask, uint64_t swap,
+                               uint64_t swap_mask, bool signaled = false, int wr_id = 0);
+    int post_masked_atomic_fa(uintptr_t dst, void *fetch, uint64_t add, int highest_bit = 63,
                               int lowest_bit = 0, bool signaled = false, int wr_id = 0);
 
     int poll_send_cq(int n = 1);

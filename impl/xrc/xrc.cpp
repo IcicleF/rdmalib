@@ -125,7 +125,7 @@ int ExtendedReliableConnection::post_recv(void *dst, size_t size, int wr_id)
     return ibv_post_srq_recv(this->srq, &wr, &bad_wr);
 }
 
-int ExtendedReliableConnection::post_atomic_cas(uintptr_t dst, void *expected, uint64_t desire,
+int ExtendedReliableConnection::post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap,
                                                 bool signaled, int wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
@@ -133,9 +133,9 @@ int ExtendedReliableConnection::post_atomic_cas(uintptr_t dst, void *expected, u
 
     ibv_exp_send_wr wr, *bad_wr;
     ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(expected);
+    sge.addr = reinterpret_cast<uintptr_t>(compare);
     sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(expected, sizeof(uint64_t));
+    sge.lkey = this->ctx->match_mr_lkey(compare, sizeof(uint64_t));
 
     memset(&wr, 0, sizeof(wr));
     wr.next = nullptr;
@@ -147,14 +147,14 @@ int ExtendedReliableConnection::post_atomic_cas(uintptr_t dst, void *expected, u
         wr.exp_send_flags = IBV_EXP_SEND_SIGNALED;
     wr.wr.atomic.remote_addr = dst;
     wr.wr.atomic.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.wr.atomic.compare_add = *(reinterpret_cast<uint64_t *>(expected));
-    wr.wr.atomic.swap = desire;
+    wr.wr.atomic.compare_add = *(reinterpret_cast<uint64_t *>(compare));
+    wr.wr.atomic.swap = swap;
     wr.xrc_remote_srq_num = this->peer->xrc_srq_nums[this->id];  // Must specify one
 
     return ibv_exp_post_send(this->ini_qp, &wr, &bad_wr);
 }
 
-int ExtendedReliableConnection::post_atomic_fa(uintptr_t dst, void *before, uint64_t delta,
+int ExtendedReliableConnection::post_atomic_fa(uintptr_t dst, void *fetch, uint64_t add,
                                                bool signaled, int wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
@@ -162,9 +162,9 @@ int ExtendedReliableConnection::post_atomic_fa(uintptr_t dst, void *before, uint
 
     ibv_exp_send_wr wr, *bad_wr;
     ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(before);
+    sge.addr = reinterpret_cast<uintptr_t>(fetch);
     sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(before, sizeof(uint64_t));
+    sge.lkey = this->ctx->match_mr_lkey(fetch, sizeof(uint64_t));
 
     memset(&wr, 0, sizeof(wr));
     wr.next = nullptr;
@@ -176,25 +176,24 @@ int ExtendedReliableConnection::post_atomic_fa(uintptr_t dst, void *before, uint
         wr.exp_send_flags = IBV_EXP_SEND_SIGNALED;
     wr.wr.atomic.remote_addr = dst;
     wr.wr.atomic.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.wr.atomic.compare_add = delta;
+    wr.wr.atomic.compare_add = add;
     wr.xrc_remote_srq_num = this->peer->xrc_srq_nums[this->id];  // Must specify one
 
     return ibv_exp_post_send(this->ini_qp, &wr, &bad_wr);
 }
 
-int ExtendedReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *expected,
-                                                       uint64_t expected_mask, uint64_t desire,
-                                                       uint64_t desire_mask, bool signaled,
-                                                       int wr_id)
+int ExtendedReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *compare,
+                                                       uint64_t compare_mask, uint64_t swap,
+                                                       uint64_t swap_mask, bool signaled, int wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post masked atomic FA to non-aligned address");
 
     ibv_exp_send_wr wr, *bad_wr;
     ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(expected);
+    sge.addr = reinterpret_cast<uintptr_t>(compare);
     sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(expected, sizeof(uint64_t));
+    sge.lkey = this->ctx->match_mr_lkey(compare, sizeof(uint64_t));
 
     memset(&wr, 0, sizeof(wr));
     wr.next = nullptr;
@@ -210,16 +209,16 @@ int ExtendedReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *expe
     wr.ext_op.masked_atomics.remote_addr = dst;
     wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
     wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_val =
-        *(reinterpret_cast<uint64_t *>(expected));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_mask = expected_mask;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_val = desire;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_mask = desire_mask;
+        *(reinterpret_cast<uint64_t *>(compare));
+    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_mask = compare_mask;
+    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_val = swap;
+    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_mask = swap_mask;
     wr.xrc_remote_srq_num = this->peer->xrc_srq_nums[this->id];  // Must specify one
 
     return ibv_exp_post_send(this->ini_qp, &wr, &bad_wr);
 }
 
-int ExtendedReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *before, uint64_t delta,
+int ExtendedReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *fetch, uint64_t add,
                                                       int highest_bit, int lowest_bit,
                                                       bool signaled, int wr_id)
 {
@@ -228,9 +227,9 @@ int ExtendedReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *befor
 
     ibv_exp_send_wr wr, *bad_wr;
     ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(before);
+    sge.addr = reinterpret_cast<uintptr_t>(fetch);
     sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(before, sizeof(uint64_t));
+    sge.lkey = this->ctx->match_mr_lkey(fetch, sizeof(uint64_t));
 
     memset(&wr, 0, sizeof(wr));
     wr.next = nullptr;
@@ -245,7 +244,7 @@ int ExtendedReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *befor
     wr.ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
     wr.ext_op.masked_atomics.remote_addr = dst;
     wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = delta << lowest_bit;
+    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = add << lowest_bit;
     wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = 1ull << highest_bit;
     wr.xrc_remote_srq_num = this->peer->xrc_srq_nums[this->id];  // Must specify one
 
