@@ -24,11 +24,14 @@
  * If T satisfies all requirements for a lock-free std::atomic<T> and sizeof(T) <= 8, then atomic
  * operations are also supported.
  *
- * @tparam T Object type.
+ * @tparam T Object type. Remember constantly that object with type T is AT REMOTE SIDE.
  */
 template <typename T>
 class rptr {
   public:
+    /**
+     * @brief The object type being pointed to.
+     */
     using object_type = T;
 
     explicit rptr(rdma::ReliableConnection &rc, uintptr_t remote_ptr, void *local_ptr)
@@ -57,8 +60,33 @@ class rptr {
         }
     }
 
-    void commit(bool notified = false) { commit(0, sizeof(T), notified); }
+    /**
+     * @brief Get the local buffer, no matter whether it is valid.
+     *
+     * @return T* Local buffer.
+     */
+    T *dereference() const { return reinterpret_cast<T *>(local_ptr); }
 
+    /**
+     * @brief Commit the content to remote side.
+     * This also causes the current local copy to be valid.
+     *
+     * @param notified If set, this will be a synchronous operation.
+     */
+    void commit(bool notified = false)
+    {
+        commit(0, sizeof(T), notified);
+        this->validate();
+    }
+
+    /**
+     * @brief Commit part of the content to remote side.
+     * This does not cause further accesses to the same part to be served locally.
+     *
+     * @param offset Offset.
+     * @param len Length.
+     * @param notified If set, this will be a synchronous operation.
+     */
     void commit(size_t offset, size_t len, bool notified = false)
     {
         if (valid) {
@@ -68,14 +96,34 @@ class rptr {
         }
     }
 
+    /**
+     * @brief Manually set the validation flag of the local copy.
+     *
+     * @param _valid Whether the local copy should be valid.
+     * @return rptr<T>& Self.
+     */
     inline rptr<T> &validate(bool _valid = true)
     {
         valid = _valid;
         return *this;
     }
 
+    /**
+     * @brief Invalidate the local copy.
+     * Equivalent to `validate(false)`.
+     *
+     * @return rptr<T>& Self.
+     */
     inline rptr<T> &invalidate() { return validate(false); }
 
+    /**
+     * @brief Reinterpret the pointer at a specified offset to get a `rptr` instance to its member
+     * (or subpart).
+     *
+     * @tparam Tp The type to be reinterpreted as.
+     * @param offset Offset of the member or the subpart.
+     * @return rptr<std::remove_pointer<Tp>> `rptr` instance as wish.
+     */
     template <typename Tp>
     rptr<std::remove_pointer<Tp>> reinterpret_at(size_t offset)
     {
@@ -90,15 +138,15 @@ class rptr {
     bool valid;
 };
 
-#define rptr_update(p, value) \
-    do {                      \
-        *(p) = (value);       \
-        (p).commit();         \
+#define rptr_update(p, value)         \
+    do {                              \
+        *(p.dereference()) = (value); \
+        (p).commit();                 \
     } while (false)
 
 #define rptr_update_member(p, member, value)                                                  \
     do {                                                                                      \
-        (p)->member = (value);                                                                \
+        (p.dereference())->member = (value);                                                  \
         (p).commit(offsetof(typename decltype(p)::object_type, member), sizeof((p)->member)); \
     } while (false)
 
