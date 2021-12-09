@@ -72,9 +72,8 @@ void Peer::establish(int num_rc, int num_xrc)
     MPI_Status mpirc;
     int rc = MPI_Sendrecv(&xchg, 1, XchgQPInfoTy, this->id, this->cluster->whoami(), &remote_xchg,
                           1, XchgQPInfoTy, this->id, this->id, MPI_COMM_WORLD, &mpirc);
-    if (rc != MPI_SUCCESS || mpirc.MPI_ERROR != MPI_SUCCESS)
-        Emergency::abort("cannot perform MPI_Sendrecv with peer " + std::to_string(this->id) +
-                         ": " + std::to_string(rc) + " " + std::to_string(mpirc.MPI_ERROR));
+    if (rc != MPI_SUCCESS)
+        Emergency::abort("cannot perform MPI_Sendrecv with peer " + std::to_string(this->id));
 
     // Store remote MR
     this->nrmrs = remote_xchg.num_mr;
