@@ -61,7 +61,13 @@ class Peer {
      */
     ~Peer();
 
-    inline std::pair<uintptr_t, size_t> remote_mr(int id) const
+    /**
+     * @brief Get the memory region registered by remote side.
+     *
+     * @param id ID of the memory region (default to 0).
+     * @return std::pair<uintptr_t, size_t> Address and length of the memory region.
+     */
+    inline std::pair<uintptr_t, size_t> remote_mr(int id = 0) const
     {
         return {reinterpret_cast<uintptr_t>(this->remote_mrs[id].addr),
                 this->remote_mrs[id].length};

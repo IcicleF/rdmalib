@@ -50,7 +50,7 @@ void Cluster::establish(int num_rc, int num_xrc)
 {
     // Check validity
     if (num_rc < 0 || num_xrc < 0 || (num_rc == 0 && num_xrc == 0)) {
-        Emergency::abort("no connections to establush");
+        Emergency::abort("no connections to establish");
     }
 
     // Allow only once

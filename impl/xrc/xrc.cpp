@@ -154,8 +154,8 @@ int ExtendedReliableConnection::post_atomic_cas(uintptr_t dst, void *compare, ui
     return ibv_exp_post_send(this->ini_qp, &wr, &bad_wr);
 }
 
-int ExtendedReliableConnection::post_atomic_fa(uintptr_t dst, void *fetch, uint64_t add,
-                                               bool signaled, int wr_id)
+int ExtendedReliableConnection::post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add,
+                                                bool signaled, int wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post atomic FA to non-aligned address");
@@ -218,7 +218,7 @@ int ExtendedReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *comp
     return ibv_exp_post_send(this->ini_qp, &wr, &bad_wr);
 }
 
-int ExtendedReliableConnection::post_masked_atomic_fa(uintptr_t dst, void *fetch, uint64_t add,
+int ExtendedReliableConnection::post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add,
                                                       int highest_bit, int lowest_bit,
                                                       bool signaled, int wr_id)
 {

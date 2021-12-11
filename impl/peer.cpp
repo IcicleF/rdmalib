@@ -51,7 +51,6 @@ void Peer::establish(int num_rc, int num_xrc)
     MPI_Datatype XchgQPInfoTy;
     MPI_Type_contiguous(sizeof(OOBExchange), MPI_BYTE, &XchgQPInfoTy);
     MPI_Type_commit(&XchgQPInfoTy);
-    MPI_Barrier(MPI_COMM_WORLD);
 
     OOBExchange xchg, remote_xchg;
     xchg.gid = this->ctx->gid;
@@ -70,8 +69,8 @@ void Peer::establish(int num_rc, int num_xrc)
 
     // Exchange connection metadata
     MPI_Status mpirc;
-    int rc = MPI_Sendrecv(&xchg, 1, XchgQPInfoTy, this->id, this->cluster->whoami(), &remote_xchg,
-                          1, XchgQPInfoTy, this->id, this->id, MPI_COMM_WORLD, &mpirc);
+    int rc = MPI_Sendrecv(&xchg, 1, XchgQPInfoTy, this->id, 0, &remote_xchg, 1, XchgQPInfoTy,
+                          this->id, 0, MPI_COMM_WORLD, &mpirc);
     if (rc != MPI_SUCCESS)
         Emergency::abort("cannot perform MPI_Sendrecv with peer " + std::to_string(this->id));
 

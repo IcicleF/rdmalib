@@ -26,14 +26,14 @@ class ReliableConnection {
 
     int post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled = false,
                         int wr_id = 0);
-    int post_atomic_fa(uintptr_t dst, void *fetch, uint64_t add, bool signaled = false,
-                       int wr_id = 0);
+    int post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, bool signaled = false,
+                        int wr_id = 0);
     int post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask, uint64_t swap,
                                uint64_t swap_mask, bool signaled = false, int wr_id = 0);
-    int post_masked_atomic_fa(uintptr_t dst, void *fetch, uint64_t add, int highest_bit = 63,
+    int post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, int highest_bit = 63,
                               int lowest_bit = 0, bool signaled = false, int wr_id = 0);
-    int post_masked_atomic_fa(uintptr_t dst, void *fetch, uint64_t add, uint64_t boundary,
-                              bool signaled = false, int wr_id = 0);
+    int post_masked_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, uint64_t boundary,
+                               bool signaled = false, int wr_id = 0);
 
     int poll_send_cq(int n = 1);
     int poll_send_cq(ibv_wc *wc_arr, int n = 1);

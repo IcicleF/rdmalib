@@ -10,23 +10,27 @@
 /**
  * @brief An abstraction for a non-thread-safe pointer to remote memory.
  * It aims to provide semantics similar to normal pointers.
+ *
+ * @note
  * Users must associate an RDMA-registered memory region (also with enough permission) with the
- * pointer to store what is read. Users should ensure that different `rptr` objects associates with
- * different memory regions, unless they have special needs.
+ * pointer to store a local copy. Users should ensure that different `rptr` objects associate with
+ * different memory regions, unless there are special needs.
  *
  * Because we cannot monitor writes to local buffers, users needs to commit the changes after they
  * write the buffer. Macros starting with `rptr_update` are used to modify the object as a whole or
  * modify a member variable and then commit.
  *
  * If T has no volatile-qualifier, then reads/writes will cause the result to be cached locally for
- * future reads. Otherwise, each read will reach the remote side.
+ * future reads. Otherwise, each read will reach the remote side (in this case, returned type will
+ * not contain volatile-qualifier).
  *
  * If T satisfies all requirements for a lock-free std::atomic<T> and sizeof(T) <= 8, then atomic
  * operations are also supported.
  *
- * @tparam T Object type. Remember constantly that object with type T is AT REMOTE SIDE.
+ * @tparam T Object type, default to uint8_t (memory semantics). Remember constantly that object
+ * with type T is AT REMOTE SIDE.
  */
-template <typename T>
+template <typename T = uint8_t>
 class rptr {
   public:
     /**
@@ -35,47 +39,63 @@ class rptr {
     using object_type = T;
 
     explicit rptr(rdma::ReliableConnection &rc, uintptr_t remote_ptr, void *local_ptr)
-        : rc(rc), remote_ptr(remote_ptr), local_ptr(reinterpret_cast<uint8_t *>(local_ptr))
+        : rc(&rc), remote_ptr(remote_ptr), local_ptr(reinterpret_cast<uint8_t *>(local_ptr))
     {
         valid = false;
     }
 
-    T &operator*()
+    inline std::remove_volatile_t<T> &operator*()
     {
-        if (!valid || std::is_volatile<T>::value) {
-            rc.post_read(local_ptr, remote_ptr, sizeof(T), true);
-            rc.poll_send_cq();
+        if (!valid || std::is_volatile_v<T>) {
+            rc->post_read(local_ptr, remote_ptr, sizeof(T), true);
+            rc->poll_send_cq();
             valid = true;
         }
-        return *reinterpret_cast<T *>(local_ptr);
+        return *reinterpret_cast<std::remove_volatile_t<T> *>(local_ptr);
     }
 
-    T *operator->() { return &(*this); }
+    inline std::remove_volatile_t<T> *operator->() { return &(*(*this)); }
 
-    rptr<T> &operator=(uintptr_t remote_ptr)
+    inline rptr<T> &operator=(uintptr_t remote_ptr)
     {
         if (remote_ptr != this->remote_ptr) {
             this->remote_ptr = remote_ptr;
             valid = false;
         }
+        return *this;
     }
+
+    inline rptr<T> &operator=(const rptr<T> &b)
+    {
+        rc = b.rc;
+        remote_ptr = b.remote_ptr;
+        local_ptr = b.local_ptr;
+        valid = b.valid;
+        return *this;
+    }
+
+    inline operator uintptr_t() const { return remote_ptr; }
+    inline operator bool() const { return !!remote_ptr; }
 
     /**
      * @brief Get the local buffer, no matter whether it is valid.
      *
-     * @return T* Local buffer.
+     * @return std::remove_volatile_t<T>* Local buffer.
      */
-    T *dereference() const { return reinterpret_cast<T *>(local_ptr); }
+    inline std::remove_volatile_t<T> *dereference() const
+    {
+        return reinterpret_cast<std::remove_volatile_t<T> *>(local_ptr);
+    }
 
     /**
      * @brief Commit the content to remote side.
      * This also causes the current local copy to be valid.
      *
-     * @param notified If set, this will be a synchronous operation.
+     * @param sync If set, this will be a synchronous operation.
      */
-    void commit(bool notified = false)
+    inline void commit(bool sync = false)
     {
-        commit(0, sizeof(T), notified);
+        commit(0, sizeof(T), sync);
         this->validate();
     }
 
@@ -85,15 +105,135 @@ class rptr {
      *
      * @param offset Offset.
      * @param len Length.
-     * @param notified If set, this will be a synchronous operation.
+     * @param sync If set, this will be a synchronous operation.
      */
-    void commit(size_t offset, size_t len, bool notified = false)
+    inline void commit(size_t offset, size_t len, bool sync = false)
     {
         if (valid) {
-            rc.post_write(remote_ptr + offset, local_ptr + offset, len, notified);
-            if (notified)
-                rc.poll_send_cq();
+            rc->post_write(remote_ptr + offset, local_ptr + offset, len, sync);
+            if (sync)
+                rc->poll_send_cq();
         }
+    }
+
+    /**
+     * @brief Perform RDMA compare-and-swap. Cause the local buffer to become valid.
+     * Note that both arguments are passed-as-value, so `compare` will not be modified.
+     *
+     * @param compare The value to be compared. Local buffer will be filled in with this value
+     * first.
+     * @param exchange The value to be exchanged.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return true If success.
+     * @return false If failed, or T does not support compare-and-swap.
+     */
+    inline bool compare_exchange(std::remove_volatile_t<T> compare,
+                                 std::remove_volatile_t<T> exchange, bool sync = true)
+    {
+        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+            *(this->dereference()) = compare;
+            rc->post_atomic_cas(remote_ptr, local_ptr, exchange, sync);
+            if (sync)
+                rc->poll_send_cq();
+            this->validate();
+            return *(this->dereference()) == compare;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Perform RDMA masked compare-and-swap. Cause the local buffer to become valid.
+     * Note that both arguments are passed-as-value, so `compare` will not be modified.
+     *
+     * @param compare The value to be compared. Local buffer will be filled in with this value
+     * first.
+     * @param compare_mask Compare mask.
+     * @param exchange The value to be exchanged.
+     * @param exchange_mask Exchange mask.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return true If success.
+     * @return false If failed, or T does not support compare-and-swap.
+     */
+    inline bool masked_compare_exchange(std::remove_volatile_t<T> compare, uint64_t compare_mask,
+                                        std::remove_volatile_t<T> exchange, uint64_t exchange_mask,
+                                        bool sync = true)
+    {
+        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+            *(this->dereference()) = compare;
+            rc->post_masked_atomic_cas(remote_ptr, local_ptr, compare_mask, exchange, exchange_mask,
+                                       sync);
+            if (sync)
+                rc->poll_send_cq();
+            this->validate();
+            return *(this->dereference()) == compare;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Perform RDMA fetch-and-add. Cause the local buffer to become valid.
+     *
+     * @param add The value to be added.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return std::remove_volatile_t<T> The value fetched (also filled in the local buffer). If T
+     * does not support fetch-and-add, return empty object by calling its default constructor.
+     */
+    inline std::remove_volatile_t<T> fetch_add(uint64_t add, bool sync = true)
+    {
+        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+            rc->post_atomic_faa(remote_ptr, local_ptr, add, sync);
+            if (sync)
+                rc->poll_send_cq();
+            this->validate();
+            return *(this->dereference());
+        }
+        return std::remove_volatile_t<T>{};
+    }
+
+    /**
+     * @brief Perform RDMA masked fetch-and-add. Cause the local buffer to become valid.
+     *
+     * @param add The value to be added (subject to the field between `highest_bit` and
+     * `lowest_bit`).
+     * @param highest_bit Highest bit of this field.
+     * @param lowest_bit Lowest bit of this field.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return T The value fetched (also filled in the local buffer). If T does not support
+     * fetch-and-add, return empty object by calling its default constructor.
+     */
+    inline std::remove_volatile_t<T> field_fetch_add(uint64_t add, int highest_bit = 63,
+                                                     int lowest_bit = 0, bool sync = true)
+    {
+        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+            rc->post_field_atomic_faa(remote_ptr, local_ptr, add, highest_bit, lowest_bit, sync);
+            if (sync)
+                rc->poll_send_cq();
+            this->validate();
+            return *(this->dereference());
+        }
+        return std::remove_volatile_t<T>{};
+    }
+
+    /**
+     * @brief Perform RDMA masked fetch-and-add. Cause the local buffer to become valid.
+     *
+     * @param add The value to be added (subject to `boundary_mask`).
+     * @param boundary_mask Set bits indicate left boundaries of FAA operations.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return T The value fetched (also filled in the local buffer). If T does not support
+     * fetch-and-add, return empty object by calling its default constructor.
+     */
+    inline std::remove_volatile_t<T> masked_fetch_add(uint64_t add, uint64_t boundary_mask,
+                                                      bool sync = true)
+    {
+        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+            rc->post_masked_atomic_faa(remote_ptr, local_ptr, add, boundary_mask, sync);
+            if (sync)
+                rc->poll_send_cq();
+            this->validate();
+            return *(this->dereference());
+        }
+        return std::remove_volatile_t<T>{};
     }
 
     /**
@@ -120,18 +260,20 @@ class rptr {
      * @brief Reinterpret the pointer at a specified offset to get a `rptr` instance to its member
      * (or subpart).
      *
-     * @tparam Tp The type to be reinterpreted as.
+     * @tparam Tp The type to be reinterpreted as. If this is a pointer, the pointer will be
+     * removed.
      * @param offset Offset of the member or the subpart.
-     * @return rptr<std::remove_pointer<Tp>> `rptr` instance as wish.
+     * @return rptr<std::remove_pointer_t<Tp>> `rptr` instance as wish.
      */
     template <typename Tp>
-    rptr<std::remove_pointer<Tp>> reinterpret_at(size_t offset)
+    inline rptr<std::remove_pointer_t<Tp>> reinterpret_at(size_t offset = 0)
     {
-        return rptr<Tp>(rc, remote_ptr + offset, local_ptr + offset).validate(valid);
+        return rptr<std::remove_pointer_t<Tp>>(*rc, remote_ptr + offset, local_ptr + offset)
+            .validate(valid);
     }
 
   private:
-    rdma::ReliableConnection &rc;
+    rdma::ReliableConnection *rc;
     uintptr_t remote_ptr;
     uint8_t *local_ptr;
 
@@ -144,10 +286,23 @@ class rptr {
         (p).commit();                 \
     } while (false)
 
+#define rptr_update_sync(p, value)    \
+    do {                              \
+        *(p.dereference()) = (value); \
+        (p).commit(true);             \
+    } while (false)
+
 #define rptr_update_member(p, member, value)                                                  \
     do {                                                                                      \
         (p.dereference())->member = (value);                                                  \
         (p).commit(offsetof(typename decltype(p)::object_type, member), sizeof((p)->member)); \
+    } while (false)
+
+#define rptr_update_member_sync(p, member, value)                                            \
+    do {                                                                                     \
+        (p.dereference())->member = (value);                                                 \
+        (p).commit(offsetof(typename decltype(p)::object_type, member), sizeof((p)->member), \
+                   true);                                                                    \
     } while (false)
 
 #endif  // __RPTR_H__
