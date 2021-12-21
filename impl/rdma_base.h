@@ -38,6 +38,11 @@ class Consts {
      * @brief Maximum number of outstanding WR/CQE of each QP/SRQ/CQ.
      */
     static const int MaxQueueDepth = 256;
+
+    /**
+     * @brief Maximum number of WRs to be posted at the same time.
+     */
+    static const int MaxPostWR = 32;
 };
 
 class Context;

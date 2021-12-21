@@ -2,6 +2,7 @@
 #define __RPTR_H__
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <type_traits>
 
@@ -38,23 +39,28 @@ class rptr {
      */
     using object_type = T;
 
+    /**
+     * @brief The actual object type.
+     */
+    using real_object_type = std::remove_volatile_t<T>;
+
     explicit rptr(rdma::ReliableConnection &rc, uintptr_t remote_ptr, void *local_ptr)
         : rc(&rc), remote_ptr(remote_ptr), local_ptr(reinterpret_cast<uint8_t *>(local_ptr))
     {
         valid = false;
     }
 
-    inline std::remove_volatile_t<T> &operator*()
+    inline real_object_type &operator*()
     {
         if (!valid || std::is_volatile_v<T>) {
             rc->post_read(local_ptr, remote_ptr, sizeof(T), true);
             rc->poll_send_cq();
             valid = true;
         }
-        return *reinterpret_cast<std::remove_volatile_t<T> *>(local_ptr);
+        return *reinterpret_cast<real_object_type *>(local_ptr);
     }
 
-    inline std::remove_volatile_t<T> *operator->() { return &(*(*this)); }
+    inline real_object_type *operator->() { return &(*(*this)); }
 
     inline rptr<T> &operator=(uintptr_t remote_ptr)
     {
@@ -80,11 +86,11 @@ class rptr {
     /**
      * @brief Get the local buffer, no matter whether it is valid.
      *
-     * @return std::remove_volatile_t<T>* Local buffer.
+     * @return real_object_type* Local buffer.
      */
-    inline std::remove_volatile_t<T> *dereference() const
+    inline real_object_type *dereference() const
     {
-        return reinterpret_cast<std::remove_volatile_t<T> *>(local_ptr);
+        return reinterpret_cast<real_object_type *>(local_ptr);
     }
 
     /**
@@ -110,7 +116,7 @@ class rptr {
     inline void commit(size_t offset, size_t len, bool sync = false)
     {
         if (valid) {
-            rc->post_write(remote_ptr + offset, local_ptr + offset, len, sync);
+            rc->post_write(remote_ptr + offset, local_ptr + offset, len, true);
             if (sync)
                 rc->poll_send_cq();
         }
@@ -127,12 +133,12 @@ class rptr {
      * @return true If success.
      * @return false If failed, or T does not support compare-and-swap.
      */
-    inline bool compare_exchange(std::remove_volatile_t<T> compare,
-                                 std::remove_volatile_t<T> exchange, bool sync = true)
+    inline bool compare_exchange(real_object_type compare, real_object_type exchange,
+                                 bool sync = true)
     {
-        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             *(this->dereference()) = compare;
-            rc->post_atomic_cas(remote_ptr, local_ptr, exchange, sync);
+            rc->post_atomic_cas(remote_ptr, local_ptr, exchange, true);
             if (sync)
                 rc->poll_send_cq();
             this->validate();
@@ -154,11 +160,11 @@ class rptr {
      * @return true If success.
      * @return false If failed, or T does not support compare-and-swap.
      */
-    inline bool masked_compare_exchange(std::remove_volatile_t<T> compare, uint64_t compare_mask,
-                                        std::remove_volatile_t<T> exchange, uint64_t exchange_mask,
+    inline bool masked_compare_exchange(real_object_type compare, uint64_t compare_mask,
+                                        real_object_type exchange, uint64_t exchange_mask,
                                         bool sync = true)
     {
-        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             *(this->dereference()) = compare;
             rc->post_masked_atomic_cas(remote_ptr, local_ptr, compare_mask, exchange, exchange_mask,
                                        sync);
@@ -175,19 +181,19 @@ class rptr {
      *
      * @param add The value to be added.
      * @param sync If set (default), this will be a synchronous operation.
-     * @return std::remove_volatile_t<T> The value fetched (also filled in the local buffer). If T
+     * @return real_object_type The value fetched (also filled in the local buffer). If T
      * does not support fetch-and-add, return empty object by calling its default constructor.
      */
-    inline std::remove_volatile_t<T> fetch_add(uint64_t add, bool sync = true)
+    inline real_object_type fetch_add(uint64_t add, bool sync = true)
     {
-        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             rc->post_atomic_faa(remote_ptr, local_ptr, add, sync);
             if (sync)
                 rc->poll_send_cq();
             this->validate();
             return *(this->dereference());
         }
-        return std::remove_volatile_t<T>{};
+        return real_object_type{};
     }
 
     /**
@@ -201,17 +207,59 @@ class rptr {
      * @return T The value fetched (also filled in the local buffer). If T does not support
      * fetch-and-add, return empty object by calling its default constructor.
      */
-    inline std::remove_volatile_t<T> field_fetch_add(uint64_t add, int highest_bit = 63,
-                                                     int lowest_bit = 0, bool sync = true)
+    inline real_object_type field_fetch_add(uint64_t add, int highest_bit = 63, int lowest_bit = 0,
+                                            bool sync = true)
     {
-        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             rc->post_field_atomic_faa(remote_ptr, local_ptr, add, highest_bit, lowest_bit, sync);
             if (sync)
                 rc->poll_send_cq();
             this->validate();
             return *(this->dereference());
         }
-        return std::remove_volatile_t<T>{};
+        return real_object_type{};
+    }
+
+    /**
+     * @brief Perform RDMA masked fetch-and-add. Cause the local buffer to become valid.
+     *
+     * @param time_limit_us The time limit for this networked request. If exceeded, return early.
+     * @param success An output parameter indicating whether the time limit specified has exceeded.
+     * @param add The value to be added (subject to the field between `highest_bit` and
+     * `lowest_bit`).
+     * @param highest_bit Highest bit of this field.
+     * @param lowest_bit Lowest bit of this field.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return real_object_type The value fetched (also filled in the local buffer). If T
+     * does not support fetch-and-add, return empty object by calling its default constructor.
+     */
+    inline real_object_type field_fetch_add_timelimit(unsigned time_limit_us, bool *success,
+                                                      uint64_t add, int highest_bit = 63,
+                                                      int lowest_bit = 0, bool sync = true)
+    {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
+            rc->post_field_atomic_faa(remote_ptr, local_ptr, add, highest_bit, lowest_bit, sync);
+            if (sync) {
+                ibv_wc wc[2];
+                auto start = std::chrono::steady_clock::now();
+                while (true) {
+                    if (std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - start)
+                            .count() < time_limit_us) {
+                        *success = false;
+                        return real_object_type{};
+                    }
+                    int res = rc->poll_send_cq_once(wc);
+                    if (res)
+                        break;
+                }
+            }
+            *success = true;
+            this->validate();
+            return *(this->dereference());
+        }
+        *success = false;
+        return real_object_type{};
     }
 
     /**
@@ -220,20 +268,60 @@ class rptr {
      * @param add The value to be added (subject to `boundary_mask`).
      * @param boundary_mask Set bits indicate left boundaries of FAA operations.
      * @param sync If set (default), this will be a synchronous operation.
-     * @return T The value fetched (also filled in the local buffer). If T does not support
-     * fetch-and-add, return empty object by calling its default constructor.
+     * @return real_object_type The value fetched (also filled in the local buffer). If T
+     * does not support fetch-and-add, return empty object by calling its default constructor.
      */
-    inline std::remove_volatile_t<T> masked_fetch_add(uint64_t add, uint64_t boundary_mask,
-                                                      bool sync = true)
+    inline real_object_type masked_fetch_add(uint64_t add, uint64_t boundary_mask, bool sync = true)
     {
-        if constexpr (sizeof(std::remove_volatile_t<T>) == sizeof(uint64_t)) {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             rc->post_masked_atomic_faa(remote_ptr, local_ptr, add, boundary_mask, sync);
             if (sync)
                 rc->poll_send_cq();
             this->validate();
             return *(this->dereference());
         }
-        return std::remove_volatile_t<T>{};
+        return real_object_type{};
+    }
+
+    /**
+     * @brief Perform RDMA masked fetch-and-add. Cause the local buffer to become valid.
+     *
+     * @param time_limit_us The time limit for this networked request. If exceeded, return early.
+     * @param success An output parameter indicating whether the time limit specified has exceeded.
+     * @param add The value to be added (subject to `boundary_mask`).
+     * @param highest_bit Highest bit of this field.
+     * @param lowest_bit Lowest bit of this field.
+     * @param sync If set (default), this will be a synchronous operation.
+     * @return real_object_type The value fetched (also filled in the local buffer). If T
+     * does not support fetch-and-add, return empty object by calling its default constructor.
+     */
+    inline real_object_type field_fetch_add_timelimit(unsigned time_limit_us, bool *success,
+                                                      uint64_t add, uint64_t boundary_mask,
+                                                      bool sync = true)
+    {
+        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
+            rc->post_masked_atomic_faa(remote_ptr, local_ptr, add, boundary_mask, sync);
+            if (sync) {
+                ibv_wc wc[2];
+                auto start = std::chrono::steady_clock::now();
+                while (true) {
+                    if (std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - start)
+                            .count() < time_limit_us) {
+                        *success = false;
+                        return real_object_type{};
+                    }
+                    int res = rc->poll_send_cq_once(wc);
+                    if (res)
+                        break;
+                }
+            }
+            *success = true;
+            this->validate();
+            return *(this->dereference());
+        }
+        *success = false;
+        return real_object_type{};
     }
 
     /**

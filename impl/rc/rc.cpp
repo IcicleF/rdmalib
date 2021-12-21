@@ -108,6 +108,32 @@ int ReliableConnection::post_recv(void *dst, size_t size, int wr_id)
     return ibv_post_recv(this->qp, &wr, &bad_wr);
 }
 
+int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr,
+                                        int count, int wr_id_start)
+{
+    ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
+    ibv_sge sge[Consts::MaxPostWR];
+    for (int i = 0; i < count; ++i) {
+        sge[i].addr = reinterpret_cast<uintptr_t>(dst_arr[i]);
+        sge[i].length = size_arr[i];
+        sge[i].lkey = this->ctx->match_mr_lkey(dst_arr[i], size_arr[i]);
+    }
+
+    memset(wr, 0, sizeof(ibv_send_wr) * count);
+    for (int i = 0; i < count; ++i) {
+        wr[i].next = (i == count - 1 ? nullptr : wr + (i + 1));
+        wr[i].wr_id = wr_id_start + i;
+        wr[i].sg_list = sge + i;
+        wr[i].num_sge = 1;
+        wr[i].opcode = IBV_WR_RDMA_READ;
+        if (i == count - 1)
+            wr[i].send_flags = IBV_SEND_SIGNALED;
+        wr[i].wr.rdma.remote_addr = src_arr[i];
+        wr[i].wr.rdma.rkey = this->peer->match_remote_mr_rkey(src_arr[i], size_arr[i]);
+    }
+    return ibv_post_send(this->qp, wr, &bad_wr);
+}
+
 int ReliableConnection::post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled,
                                         int wr_id)
 {
@@ -257,6 +283,65 @@ int ReliableConnection::post_masked_atomic_faa(uintptr_t dst, void *fetch, uint6
     wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = boundary;
 
     return ibv_exp_post_send(this->qp, &wr, &bad_wr);
+}
+
+int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr,
+                                                     uint64_t *add_arr, uint64_t *boundary_arr,
+                                                     int count, int wr_id_start)
+{
+    ibv_exp_send_wr wr[Consts::MaxPostWR], *bad_wr;
+    ibv_sge sge[Consts::MaxPostWR];
+    for (int i = 0; i < count; ++i) {
+        if (__glibc_unlikely((reinterpret_cast<uintptr_t>(fetch_arr[i]) & 0x7) != 0))
+            Emergency::abort("post masked atomic FA to local non-aligned address");
+
+        sge[i].addr = reinterpret_cast<uintptr_t>(fetch_arr[i]);
+        sge[i].length = 8;
+        sge[i].lkey = this->ctx->match_mr_lkey(fetch_arr[i], 8);
+    }
+
+    memset(wr, 0, sizeof(ibv_exp_send_wr) * count);
+    for (int i = 0; i < count; ++i) {
+        if (__glibc_unlikely((dst_arr[i] & 0x7) != 0))
+            Emergency::abort("post masked atomic FA to remote non-aligned address");
+
+        wr[i].next = (i == count - 1 ? nullptr : wr + (i + 1));
+        wr[i].wr_id = wr_id_start + i;
+        wr[i].sg_list = sge + i;
+        wr[i].num_sge = 1;
+        wr[i].exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
+        wr[i].exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
+        if (i == count - 1)
+            wr[i].exp_send_flags |= IBV_SEND_SIGNALED;
+
+        wr[i].ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
+        wr[i].ext_op.masked_atomics.remote_addr = dst_arr[i];
+        wr[i].ext_op.masked_atomics.rkey =
+            this->peer->match_remote_mr_rkey(dst_arr[i], sizeof(uint64_t));
+        wr[i].ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = add_arr[i];
+        wr[i].ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary =
+            boundary_arr[i];
+    }
+    return ibv_exp_post_send(this->qp, wr, &bad_wr);
+}
+
+void ReliableConnection::fill_sge(ibv_sge *sge, void *addr, size_t length)
+{
+    sge->addr = reinterpret_cast<uintptr_t>(addr);
+    sge->length = length;
+    sge->lkey = this->ctx->match_mr_lkey(addr, length);
+}
+
+int ReliableConnection::post_send(ibv_exp_send_wr *wr)
+{
+    ibv_exp_send_wr *bad_wr;
+    return ibv_exp_post_send(this->qp, wr, &bad_wr);
+}
+
+int ReliableConnection::post_recv(ibv_recv_wr *wr)
+{
+    ibv_recv_wr *bad_wr;
+    return ibv_post_recv(this->qp, wr, &bad_wr);
 }
 
 int ReliableConnection::poll_send_cq(int n)
