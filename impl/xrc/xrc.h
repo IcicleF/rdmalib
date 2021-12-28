@@ -26,21 +26,21 @@ class ExtendedReliableConnection {
     ExtendedReliableConnection(ExtendedReliableConnection const &) = delete;
     ExtendedReliableConnection(ExtendedReliableConnection &&) = delete;
 
-    int post_read(void *dst, uintptr_t src, size_t size, bool signaled = false, int wr_id = 0);
+    int post_read(void *dst, uintptr_t src, size_t size, bool signaled = false, uint32_t wr_id = 0);
     int post_write(uintptr_t dst, void const *src, size_t size, bool signaled = false,
-                   int wr_id = 0);
+                   uint32_t wr_id = 0);
     int post_send(void const *src, size_t size, int remote_id = 0, bool signaled = false,
-                  int wr_id = 0);
-    int post_recv(void *dst, size_t size, int wr_id = 0);
+                  uint32_t wr_id = 0);
+    int post_recv(void *dst, size_t size, uint32_t wr_id = 0);
 
     int post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled = false,
-                        int wr_id = 0);
+                        uint32_t wr_id = 0);
     int post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, bool signaled = false,
-                        int wr_id = 0);
+                        uint32_t wr_id = 0);
     int post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask, uint64_t swap,
-                               uint64_t swap_mask, bool signaled = false, int wr_id = 0);
+                               uint64_t swap_mask, bool signaled = false, uint32_t wr_id = 0);
     int post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, int highest_bit = 63,
-                              int lowest_bit = 0, bool signaled = false, int wr_id = 0);
+                              int lowest_bit = 0, bool signaled = false, uint32_t wr_id = 0);
 
     int poll_send_cq(int n = 1);
     int poll_send_cq(ibv_wc *wc_arr, int n = 1);

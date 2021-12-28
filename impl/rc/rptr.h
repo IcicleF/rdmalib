@@ -52,7 +52,7 @@ class rptr {
 
     inline real_object_type &operator*()
     {
-        if (!valid || std::is_volatile_v<T>) {
+        if (std::is_volatile_v<T> || !valid) {
             rc->post_read(local_ptr, remote_ptr, sizeof(T), true);
             rc->poll_send_cq();
             valid = true;

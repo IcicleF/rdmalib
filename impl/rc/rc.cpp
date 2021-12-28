@@ -30,7 +30,8 @@ ReliableConnection::~ReliableConnection()
     this->ctx->refcnt.fetch_sub(1);
 }
 
-int ReliableConnection::post_read(void *dst, uintptr_t src, size_t size, bool signaled, int wr_id)
+int ReliableConnection::post_read(void *dst, uintptr_t src, size_t size, bool signaled,
+                                  uint32_t wr_id)
 {
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -52,7 +53,7 @@ int ReliableConnection::post_read(void *dst, uintptr_t src, size_t size, bool si
 }
 
 int ReliableConnection::post_write(uintptr_t dst, void const *src, size_t size, bool signaled,
-                                   int wr_id)
+                                   uint32_t wr_id)
 {
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -73,7 +74,7 @@ int ReliableConnection::post_write(uintptr_t dst, void const *src, size_t size, 
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int ReliableConnection::post_send(void const *src, size_t size, bool signaled, int wr_id)
+int ReliableConnection::post_send(void const *src, size_t size, bool signaled, uint32_t wr_id)
 {
     ibv_send_wr wr, *bad_wr;
     ibv_sge sge;
@@ -92,7 +93,7 @@ int ReliableConnection::post_send(void const *src, size_t size, bool signaled, i
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int ReliableConnection::post_recv(void *dst, size_t size, int wr_id)
+int ReliableConnection::post_recv(void *dst, size_t size, uint32_t wr_id)
 {
     ibv_recv_wr wr, *bad_wr;
     ibv_sge sge;
@@ -109,7 +110,7 @@ int ReliableConnection::post_recv(void *dst, size_t size, int wr_id)
 }
 
 int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr,
-                                        int count, int wr_id_start)
+                                        int count, uint32_t wr_id_start)
 {
     ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
@@ -135,7 +136,7 @@ int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size
 }
 
 int ReliableConnection::post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled,
-                                        int wr_id)
+                                        uint32_t wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post atomic CAS to non-aligned address");
@@ -162,7 +163,7 @@ int ReliableConnection::post_atomic_cas(uintptr_t dst, void *compare, uint64_t s
 }
 
 int ReliableConnection::post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, bool signaled,
-                                        int wr_id)
+                                        uint32_t wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post atomic FA to non-aligned address");
@@ -189,7 +190,7 @@ int ReliableConnection::post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add
 
 int ReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask,
                                                uint64_t swap, uint64_t swap_mask, bool signaled,
-                                               int wr_id)
+                                               uint32_t wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post masked atomic FA to non-aligned address");
@@ -224,7 +225,7 @@ int ReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *compare, uin
 
 int ReliableConnection::post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add,
                                               int highest_bit, int lowest_bit, bool signaled,
-                                              int wr_id)
+                                              uint32_t wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post masked atomic FA to non-aligned address");
@@ -255,7 +256,7 @@ int ReliableConnection::post_field_atomic_faa(uintptr_t dst, void *fetch, uint64
 }
 
 int ReliableConnection::post_masked_atomic_faa(uintptr_t dst, void *fetch, uint64_t add,
-                                               uint64_t boundary, bool signaled, int wr_id)
+                                               uint64_t boundary, bool signaled, uint32_t wr_id)
 {
     if (__glibc_unlikely((dst & 0x7) != 0))
         Emergency::abort("post masked atomic FA to non-aligned address");
@@ -287,7 +288,7 @@ int ReliableConnection::post_masked_atomic_faa(uintptr_t dst, void *fetch, uint6
 
 int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr,
                                                      uint64_t *add_arr, uint64_t *boundary_arr,
-                                                     int count, int wr_id_start)
+                                                     int count, uint32_t wr_id_start)
 {
     ibv_exp_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
