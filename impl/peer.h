@@ -84,16 +84,6 @@ class Peer {
     inline ReliableConnection &rc(int id = 0) const { return *rcs[id]; }
 
     /**
-     * @brief Get the reference of an RDMA XRC end with certain ID.
-     * If the ID is not specified, return the first XRC end.
-     *
-     * @param id The ID of the RDMA XRC end.
-     * @return ExtendedReliableConnection& Object reference representing the RDMA
-     * XRC end.
-     */
-    inline ExtendedReliableConnection &xrc(int id = 0) const { return *xrcs[id]; }
-
-    /**
      * @brief Get the reference of connection with certain ID.
      * If the ID is not specified, return the first connection.
      *
@@ -110,7 +100,7 @@ class Peer {
   private:
     explicit Peer(Cluster &cluster, int id);
 
-    void establish(int num_rc, int num_xrc);
+    void establish(int num_rc);
 
     /**
      * @brief Match a given remote address range to MR and return its rkey.
@@ -166,8 +156,6 @@ class Peer {
     std::array<ibv_mr, Consts::MaxMrs> remote_mrs;
 
     std::vector<ReliableConnection *> rcs;
-    std::vector<ExtendedReliableConnection *> xrcs;
-    std::vector<uint32_t> xrc_srq_nums;
 };
 
 }  // namespace rdma

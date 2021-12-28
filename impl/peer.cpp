@@ -5,7 +5,6 @@
 #include "context.h"
 #include "peer.h"
 #include "rc/rc.h"
-#include "xrc/xrc.h"
 
 namespace rdma {
 
@@ -26,26 +25,16 @@ Peer::~Peer()
         this->rcs.clear();
     }
 
-    if (this->xrcs.size()) {
-        for (size_t i = 0; i < this->xrcs.size(); ++i)
-            delete this->xrcs[i];
-        this->xrcs.clear();
-    }
-
     // Dereference the RDMA context
     this->ctx->refcnt.fetch_sub(1);
 }
 
-void Peer::establish(int num_rc, int num_xrc)
+void Peer::establish(int num_rc)
 {
     // Initiate connections
     this->rcs.assign(num_rc, nullptr);
     for (int i = 0; i < num_rc; ++i)
         this->rcs[i] = new ReliableConnection(*this, i);
-
-    this->xrcs.assign(num_xrc, nullptr);
-    for (int i = 0; i < num_xrc; ++i)
-        this->xrcs[i] = new ExtendedReliableConnection(*this, i);
 
     // Prepare out-of-band connection metadata
     MPI_Datatype XchgQPInfoTy;
@@ -63,10 +52,6 @@ void Peer::establish(int num_rc, int num_xrc)
     for (int i = 0; i < num_rc; ++i)
         this->rcs[i]->fill_exchange(&xchg);
 
-    xchg.num_xrc = num_xrc;
-    for (int i = 0; i < num_xrc; ++i)
-        this->xrcs[i]->fill_exchange(&xchg);
-
     // Exchange connection metadata
     MPI_Status mpirc;
     int rc = MPI_Sendrecv(&xchg, 1, XchgQPInfoTy, this->id, 0, &remote_xchg, 1, XchgQPInfoTy,
@@ -79,17 +64,9 @@ void Peer::establish(int num_rc, int num_xrc)
     for (int i = 0; i < this->nrmrs; ++i)
         this->remote_mrs[i] = remote_xchg.mr[i];
 
-    // Store remote XRC SRQ nums
-    this->xrc_srq_nums.assign(num_xrc, 0);
-    for (int i = 0; i < num_xrc; ++i)
-        this->xrc_srq_nums[i] = remote_xchg.xrc_srq_num[i];
-
     // Connect
     for (int i = 0; i < num_rc; ++i)
         this->rcs[i]->establish(remote_xchg.gid, remote_xchg.lid, remote_xchg.rc_qp_num[i]);
-    for (int i = 0; i < num_xrc; ++i)
-        this->xrcs[i]->establish(remote_xchg.gid, remote_xchg.lid, remote_xchg.xrc_ini_qp_num[i],
-                                 remote_xchg.xrc_tgt_qp_num[i]);
 }
 
 }  // namespace rdma

@@ -187,144 +187,6 @@ int ReliableConnection::post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add
     return ibv_post_send(this->qp, &wr, &bad_wr);
 }
 
-int ReliableConnection::post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask,
-                                               uint64_t swap, uint64_t swap_mask, bool signaled,
-                                               int wr_id)
-{
-    if (__glibc_unlikely((dst & 0x7) != 0))
-        Emergency::abort("post masked atomic FA to non-aligned address");
-
-    ibv_exp_send_wr wr, *bad_wr;
-    ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(compare);
-    sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(compare, sizeof(uint64_t));
-
-    memset(&wr, 0, sizeof(wr));
-    wr.next = nullptr;
-    wr.wr_id = wr_id;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
-    wr.exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP;
-    wr.exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-    if (signaled)
-        wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-
-    wr.ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
-    wr.ext_op.masked_atomics.remote_addr = dst;
-    wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_val =
-        *(reinterpret_cast<uint64_t *>(compare));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.compare_mask = compare_mask;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_val = swap;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.cmp_swap.swap_mask = swap_mask;
-
-    return ibv_exp_post_send(this->qp, &wr, &bad_wr);
-}
-
-int ReliableConnection::post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add,
-                                              int highest_bit, int lowest_bit, bool signaled,
-                                              int wr_id)
-{
-    if (__glibc_unlikely((dst & 0x7) != 0))
-        Emergency::abort("post masked atomic FA to non-aligned address");
-
-    ibv_exp_send_wr wr, *bad_wr;
-    ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(fetch);
-    sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(fetch, sizeof(uint64_t));
-
-    memset(&wr, 0, sizeof(wr));
-    wr.next = nullptr;
-    wr.wr_id = wr_id;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
-    wr.exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
-    wr.exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-    if (signaled)
-        wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-
-    wr.ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
-    wr.ext_op.masked_atomics.remote_addr = dst;
-    wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = add << lowest_bit;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = 1ull << highest_bit;
-
-    return ibv_exp_post_send(this->qp, &wr, &bad_wr);
-}
-
-int ReliableConnection::post_masked_atomic_faa(uintptr_t dst, void *fetch, uint64_t add,
-                                               uint64_t boundary, bool signaled, int wr_id)
-{
-    if (__glibc_unlikely((dst & 0x7) != 0))
-        Emergency::abort("post masked atomic FA to non-aligned address");
-
-    ibv_exp_send_wr wr, *bad_wr;
-    ibv_sge sge;
-    sge.addr = reinterpret_cast<uintptr_t>(fetch);
-    sge.length = sizeof(uint64_t);
-    sge.lkey = this->ctx->match_mr_lkey(fetch, sizeof(uint64_t));
-
-    memset(&wr, 0, sizeof(wr));
-    wr.next = nullptr;
-    wr.wr_id = wr_id;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
-    wr.exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
-    wr.exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-    if (signaled)
-        wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
-
-    wr.ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
-    wr.ext_op.masked_atomics.remote_addr = dst;
-    wr.ext_op.masked_atomics.rkey = this->peer->match_remote_mr_rkey(dst, sizeof(uint64_t));
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = add;
-    wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = boundary;
-
-    return ibv_exp_post_send(this->qp, &wr, &bad_wr);
-}
-
-int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr,
-                                                     uint64_t *add_arr, uint64_t *boundary_arr,
-                                                     int count, int wr_id_start)
-{
-    ibv_exp_send_wr wr[Consts::MaxPostWR], *bad_wr;
-    ibv_sge sge[Consts::MaxPostWR];
-    for (int i = 0; i < count; ++i) {
-        if (__glibc_unlikely((reinterpret_cast<uintptr_t>(fetch_arr[i]) & 0x7) != 0))
-            Emergency::abort("post masked atomic FA to local non-aligned address");
-
-        sge[i].addr = reinterpret_cast<uintptr_t>(fetch_arr[i]);
-        sge[i].length = 8;
-        sge[i].lkey = this->ctx->match_mr_lkey(fetch_arr[i], 8);
-    }
-
-    memset(wr, 0, sizeof(ibv_exp_send_wr) * count);
-    for (int i = 0; i < count; ++i) {
-        if (__glibc_unlikely((dst_arr[i] & 0x7) != 0))
-            Emergency::abort("post masked atomic FA to remote non-aligned address");
-
-        wr[i].next = (i == count - 1 ? nullptr : wr + (i + 1));
-        wr[i].wr_id = wr_id_start + i;
-        wr[i].sg_list = sge + i;
-        wr[i].num_sge = 1;
-        wr[i].exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
-        wr[i].exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-        if (i == count - 1)
-            wr[i].exp_send_flags |= IBV_SEND_SIGNALED;
-
-        wr[i].ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
-        wr[i].ext_op.masked_atomics.remote_addr = dst_arr[i];
-        wr[i].ext_op.masked_atomics.rkey =
-            this->peer->match_remote_mr_rkey(dst_arr[i], sizeof(uint64_t));
-        wr[i].ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.add_val = add_arr[i];
-        wr[i].ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary =
-            boundary_arr[i];
-    }
-    return ibv_exp_post_send(this->qp, wr, &bad_wr);
-}
-
 void ReliableConnection::fill_sge(ibv_sge *sge, void *addr, size_t length)
 {
     sge->addr = reinterpret_cast<uintptr_t>(addr);
@@ -452,24 +314,19 @@ int ReliableConnection::create_cq(ibv_cq **cq, int cq_depth)
 
 int ReliableConnection::create_qp(int qp_depth)
 {
-    ibv_exp_qp_init_attr init_attr;
-    memset(&init_attr, 0, sizeof(ibv_exp_qp_init_attr));
+    ibv_qp_init_attr init_attr;
+    memset(&init_attr, 0, sizeof(ibv_qp_init_attr));
 
     init_attr.qp_type = IBV_QPT_RC;
     init_attr.sq_sig_all = 0;
     init_attr.send_cq = this->send_cq;
     init_attr.recv_cq = this->recv_cq;
-    init_attr.pd = this->ctx->pd;
-    init_attr.comp_mask = IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS | IBV_EXP_QP_INIT_ATTR_PD |
-                          IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
-    init_attr.exp_create_flags = IBV_EXP_QP_CREATE_EC_PARITY_EN;  // Enable EC
-    init_attr.max_atomic_arg = sizeof(uint64_t);                  // Enable extended atomics
     init_attr.cap.max_send_wr = qp_depth;
     init_attr.cap.max_recv_wr = qp_depth;
     init_attr.cap.max_send_sge = 16;
     init_attr.cap.max_recv_sge = 16;
 
-    this->qp = ibv_exp_create_qp(this->ctx->ctx, &init_attr);
+    this->qp = ibv_create_qp(this->ctx->pd, &init_attr);
     return errno;
 }
 

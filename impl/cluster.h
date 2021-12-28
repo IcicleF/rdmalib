@@ -47,9 +47,8 @@ class Cluster {
      * kill the process.
      *
      * @param num_rc Number of RDMA RC connection(s) to establish.
-     * @param num_xrc Number of RDMA XRC connection(s) to establish.
      */
-    void establish(int num_rc = 1, int num_xrc = 0);
+    void establish(int num_rc = 1);
 
     /**
      * @brief Synchronize among all peers with MPI_Barrier.

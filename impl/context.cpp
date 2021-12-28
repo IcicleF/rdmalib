@@ -36,13 +36,6 @@ Context::Context(char const *dev_name) : nmrs(0), refcnt(0)
 
     // Protected Domain
     this->pd = ibv_alloc_pd(ctx);
-
-    // XRC Domain
-    ibv_xrcd_init_attr xrcd_init_attr;
-    xrcd_init_attr.fd = -1;
-    xrcd_init_attr.oflags = O_CREAT;
-    xrcd_init_attr.comp_mask = IBV_XRCD_INIT_ATTR_FD | IBV_XRCD_INIT_ATTR_OFLAGS;
-    this->xrcd = ibv_open_xrcd(ctx, &xrcd_init_attr);
 }
 
 Context::~Context()
@@ -55,7 +48,6 @@ Context::~Context()
     // MR -> XRCD -> PD -> Context
     for (int i = 0; i < this->nmrs; ++i)
         ibv_dereg_mr(this->mrs[i]);
-    ibv_close_xrcd(this->xrcd);
     ibv_dealloc_pd(this->pd);
     ibv_close_device(this->ctx);
 }
@@ -80,37 +72,7 @@ int Context::reg_mr(uintptr_t addr, size_t size, int perm)
 
 void Context::check_dev_attr()
 {
-    ibv_exp_device_attr dev_attr;
-    memset(&dev_attr, 0, sizeof(ibv_exp_device_attr));
-
-    // Extended atomics
-    dev_attr.exp_device_cap_flags |= IBV_EXP_DEVICE_EXT_ATOMICS;
-    dev_attr.exp_device_cap_flags |= IBV_EXP_DEVICE_EXT_MASKED_ATOMICS;
-    dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
-    dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS;
-    dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_MASKED_ATOMICS;
-
-    // Multi-packet
-    dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_MP_RQ;
-
-    // EC
-    dev_attr.exp_device_cap_flags |= IBV_EXP_DEVICE_EC_OFFLOAD;
-    dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EC_CAPS;
-    dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EC_GF_BASE;
-
-    ibv_exp_query_device(this->ctx, &dev_attr);
-    this->device_attr = dev_attr;
-
-    auto check_bit = [](uint64_t x, uint64_t mask) -> bool { return !!(x & mask); };
-
-    if (!check_bit(dev_attr.exp_device_cap_flags, IBV_EXP_DEVICE_EXT_MASKED_ATOMICS))
-        fprintf(stderr, "ibv_exp: NIC does not support ext atomic\n");
-
-    if (!check_bit(dev_attr.comp_mask, IBV_EXP_DEVICE_ATTR_MP_RQ))
-        fprintf(stderr, "ibv_exp: NIC does not support multi-packet srq\n");
-
-    if (!check_bit(dev_attr.exp_device_cap_flags, IBV_EXP_DEVICE_EC_OFFLOAD))
-        fprintf(stderr, "ibv_exp: NIC does not support EC offload\n");
+    // No-op
 }
 
 }  // namespace rdma

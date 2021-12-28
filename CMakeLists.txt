@@ -31,9 +31,7 @@ add_library(rdmalib
     impl/context.cpp
     impl/cluster.cpp
     impl/peer.cpp
-
     impl/rc/rc.cpp
-    impl/xrc/xrc.cpp
 )
 
 # Test application

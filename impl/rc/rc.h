@@ -31,15 +31,6 @@ class ReliableConnection {
                         int wr_id = 0);
     int post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, bool signaled = false,
                         int wr_id = 0);
-    int post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask, uint64_t swap,
-                               uint64_t swap_mask, bool signaled = false, int wr_id = 0);
-    int post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, int highest_bit = 63,
-                              int lowest_bit = 0, bool signaled = false, int wr_id = 0);
-    int post_masked_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, uint64_t boundary,
-                               bool signaled = false, int wr_id = 0);
-
-    int post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr, uint64_t *add_arr,
-                                     uint64_t *boundary_arr, int count, int wr_id_start = 0);
 
     void fill_sge(ibv_sge *sge, void *addr, size_t length);
     int post_send(ibv_exp_send_wr *wr);

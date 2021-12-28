@@ -22,7 +22,7 @@ int main(int argc, char **argv)
         ctx.reg_mr(buf, 1024);
 
         rdma::Cluster cluster(ctx);
-        cluster.establish(1, 1);
+        cluster.establish(1);
 
         // Send to next
         int id = cluster.whoami();
@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 
         auto &next = cluster.peer(next_id);
         auto [dst, dst_size] = next.remote_mr(0);
-        auto &conn = next.xrc(0);
+        auto &conn = next.rc(0);
 
         int nc = sprintf(buf, "hello from %d", id);
         conn.post_write(dst + 64, buf, strlen(buf), true);

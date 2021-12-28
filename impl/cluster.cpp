@@ -46,10 +46,10 @@ Cluster::~Cluster()
     this->ctx->refcnt.fetch_sub(1);
 }
 
-void Cluster::establish(int num_rc, int num_xrc)
+void Cluster::establish(int num_rc)
 {
     // Check validity
-    if (num_rc < 0 || num_xrc < 0 || (num_rc == 0 && num_xrc == 0)) {
+    if (num_rc < 0) {
         Emergency::abort("no connections to establish");
     }
 
@@ -65,7 +65,7 @@ void Cluster::establish(int num_rc, int num_xrc)
     for (int i = 0; i < this->n; ++i) {
         if (i == this->id)
             continue;
-        this->peers[i]->establish(num_rc, num_xrc);
+        this->peers[i]->establish(num_rc);
     }
 
     // Now all connections has been established, barrier

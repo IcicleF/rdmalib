@@ -127,7 +127,7 @@ class Context {
         return this->match_mr_lkey(reinterpret_cast<void *>(addr), size);
     }
 
-    ibv_exp_device_attr device_attr;
+    ibv_device_attr device_attr;
     ibv_port_attr port_attr;
     ibv_context *ctx;
     ibv_gid gid;
