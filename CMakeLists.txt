@@ -40,9 +40,14 @@ add_library(rdmalib
 option(TESTAPP "Compile an rdmalib test app" OFF)
 
 if (TESTAPP)
-    message(STATUS "[rdmalib] Compile a simple test app.")
-    add_executable(hello test/hello.cpp)
-    target_include_directories(hello PRIVATE ${CMAKE_SOURCE_DIR})
-    target_link_libraries(hello rdmalib ibverbs ${MPI_CXX_LIBRARIES})
+    message(STATUS "[rdmalib] Compile test apps.")
+    
+    file(GLOB_RECURSE TESTAPPS test/*.cpp)
+    foreach(test_filename IN LISTS TESTAPPS)
+        string(REGEX REPLACE ".+/(.+)\\..*" "\\1" name ${test_filename})
+        add_executable(${name} ${test_filename})
+        target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR})
+        target_link_libraries(${name} ${MPI_CXX_LIBRARIES} rdmalib ibverbs)
+    endforeach()
 else ()
 endif ()
