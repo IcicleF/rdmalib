@@ -112,6 +112,9 @@ int ReliableConnection::post_recv(void *dst, size_t size, uint32_t wr_id)
 int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr,
                                         int count, uint32_t wr_id_start)
 {
+    if (count <= 0 || count > Consts::MaxPostWR)
+        return 0;
+
     ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
     for (int i = 0; i < count; ++i) {
@@ -290,6 +293,9 @@ int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **
                                                      uint64_t *add_arr, uint64_t *boundary_arr,
                                                      int count, uint32_t wr_id_start)
 {
+    if (count <= 0 || count > Consts::MaxPostWR)
+        return 0;
+
     ibv_exp_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
     for (int i = 0; i < count; ++i) {

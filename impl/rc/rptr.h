@@ -139,9 +139,10 @@ class rptr {
         if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             *(this->dereference()) = compare;
             rc->post_atomic_cas(remote_ptr, local_ptr, exchange, true);
-            if (sync)
+            if (sync) {
                 rc->poll_send_cq();
-            this->validate();
+                this->validate();
+            }
             return *(this->dereference()) == compare;
         }
         return false;
@@ -168,9 +169,10 @@ class rptr {
             *(this->dereference()) = compare;
             rc->post_masked_atomic_cas(remote_ptr, local_ptr, compare_mask, exchange, exchange_mask,
                                        sync);
-            if (sync)
+            if (sync) {
                 rc->poll_send_cq();
-            this->validate();
+                this->validate();
+            }
             return *(this->dereference()) == compare;
         }
         return false;
@@ -188,9 +190,10 @@ class rptr {
     {
         if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             rc->post_atomic_faa(remote_ptr, local_ptr, add, sync);
-            if (sync)
+            if (sync) {
                 rc->poll_send_cq();
-            this->validate();
+                this->validate();
+            }
             return *(this->dereference());
         }
         return real_object_type{};
@@ -212,53 +215,12 @@ class rptr {
     {
         if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             rc->post_field_atomic_faa(remote_ptr, local_ptr, add, highest_bit, lowest_bit, sync);
-            if (sync)
-                rc->poll_send_cq();
-            this->validate();
-            return *(this->dereference());
-        }
-        return real_object_type{};
-    }
-
-    /**
-     * @brief Perform RDMA masked fetch-and-add. Cause the local buffer to become valid.
-     *
-     * @param time_limit_us The time limit for this networked request. If exceeded, return early.
-     * @param success An output parameter indicating whether the time limit specified has exceeded.
-     * @param add The value to be added (subject to the field between `highest_bit` and
-     * `lowest_bit`).
-     * @param highest_bit Highest bit of this field.
-     * @param lowest_bit Lowest bit of this field.
-     * @param sync If set (default), this will be a synchronous operation.
-     * @return real_object_type The value fetched (also filled in the local buffer). If T
-     * does not support fetch-and-add, return empty object by calling its default constructor.
-     */
-    inline real_object_type field_fetch_add_timelimit(unsigned time_limit_us, bool *success,
-                                                      uint64_t add, int highest_bit = 63,
-                                                      int lowest_bit = 0, bool sync = true)
-    {
-        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
-            rc->post_field_atomic_faa(remote_ptr, local_ptr, add, highest_bit, lowest_bit, sync);
             if (sync) {
-                ibv_wc wc[2];
-                auto start = std::chrono::steady_clock::now();
-                while (true) {
-                    if (std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - start)
-                            .count() < time_limit_us) {
-                        *success = false;
-                        return real_object_type{};
-                    }
-                    int res = rc->poll_send_cq_once(wc);
-                    if (res)
-                        break;
-                }
+                rc->poll_send_cq();
+                this->validate();
             }
-            *success = true;
-            this->validate();
             return *(this->dereference());
         }
-        *success = false;
         return real_object_type{};
     }
 
@@ -275,52 +237,12 @@ class rptr {
     {
         if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
             rc->post_masked_atomic_faa(remote_ptr, local_ptr, add, boundary_mask, sync);
-            if (sync)
-                rc->poll_send_cq();
-            this->validate();
-            return *(this->dereference());
-        }
-        return real_object_type{};
-    }
-
-    /**
-     * @brief Perform RDMA masked fetch-and-add. Cause the local buffer to become valid.
-     *
-     * @param time_limit_us The time limit for this networked request. If exceeded, return early.
-     * @param success An output parameter indicating whether the time limit specified has exceeded.
-     * @param add The value to be added (subject to `boundary_mask`).
-     * @param highest_bit Highest bit of this field.
-     * @param lowest_bit Lowest bit of this field.
-     * @param sync If set (default), this will be a synchronous operation.
-     * @return real_object_type The value fetched (also filled in the local buffer). If T
-     * does not support fetch-and-add, return empty object by calling its default constructor.
-     */
-    inline real_object_type field_fetch_add_timelimit(unsigned time_limit_us, bool *success,
-                                                      uint64_t add, uint64_t boundary_mask,
-                                                      bool sync = true)
-    {
-        if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
-            rc->post_masked_atomic_faa(remote_ptr, local_ptr, add, boundary_mask, sync);
             if (sync) {
-                ibv_wc wc[2];
-                auto start = std::chrono::steady_clock::now();
-                while (true) {
-                    if (std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - start)
-                            .count() < time_limit_us) {
-                        *success = false;
-                        return real_object_type{};
-                    }
-                    int res = rc->poll_send_cq_once(wc);
-                    if (res)
-                        break;
-                }
+                rc->poll_send_cq();
+                this->validate();
             }
-            *success = true;
-            this->validate();
             return *(this->dereference());
         }
-        *success = false;
         return real_object_type{};
     }
 
