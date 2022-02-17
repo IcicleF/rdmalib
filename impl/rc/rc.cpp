@@ -109,35 +109,6 @@ int ReliableConnection::post_recv(void *dst, size_t size, uint32_t wr_id)
     return ibv_post_recv(this->qp, &wr, &bad_wr);
 }
 
-int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr,
-                                        int count, uint32_t wr_id_start)
-{
-    if (count <= 0 || count > Consts::MaxPostWR)
-        return 0;
-
-    ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
-    ibv_sge sge[Consts::MaxPostWR];
-    for (int i = 0; i < count; ++i) {
-        sge[i].addr = reinterpret_cast<uintptr_t>(dst_arr[i]);
-        sge[i].length = size_arr[i];
-        sge[i].lkey = this->ctx->match_mr_lkey(dst_arr[i], size_arr[i]);
-    }
-
-    memset(wr, 0, sizeof(ibv_send_wr) * count);
-    for (int i = 0; i < count; ++i) {
-        wr[i].next = (i == count - 1 ? nullptr : wr + (i + 1));
-        wr[i].wr_id = wr_id_start + i;
-        wr[i].sg_list = sge + i;
-        wr[i].num_sge = 1;
-        wr[i].opcode = IBV_WR_RDMA_READ;
-        if (i == count - 1)
-            wr[i].send_flags = IBV_SEND_SIGNALED;
-        wr[i].wr.rdma.remote_addr = src_arr[i];
-        wr[i].wr.rdma.rkey = this->peer->match_remote_mr_rkey(src_arr[i], size_arr[i]);
-    }
-    return ibv_post_send(this->qp, wr, &bad_wr);
-}
-
 int ReliableConnection::post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled,
                                         uint32_t wr_id)
 {
@@ -271,7 +242,6 @@ int ReliableConnection::post_masked_atomic_faa(uintptr_t dst, void *fetch, uint6
     sge.lkey = this->ctx->match_mr_lkey(fetch, sizeof(uint64_t));
 
     memset(&wr, 0, sizeof(wr));
-    wr.next = nullptr;
     wr.wr_id = wr_id;
     wr.sg_list = &sge;
     wr.num_sge = 1;
@@ -287,6 +257,80 @@ int ReliableConnection::post_masked_atomic_faa(uintptr_t dst, void *fetch, uint6
     wr.ext_op.masked_atomics.wr_data.inline_data.op.fetch_add.field_boundary = boundary;
 
     return ibv_exp_post_send(this->qp, &wr, &bad_wr);
+}
+
+int ReliableConnection::post_wait(ibv_cq *cq, int cqe, bool signaled)
+{
+    ibv_exp_send_wr wr, *bad_wr;
+
+    memset(&wr, 0, sizeof(wr));
+    wr.exp_opcode = IBV_EXP_WR_CQE_WAIT;
+    wr.exp_send_flags = IBV_EXP_SEND_WAIT_EN_LAST;
+    if (signaled)
+        wr.exp_send_flags |= IBV_EXP_SEND_SIGNALED;
+
+    wr.task.cqe_wait.cq = cq;
+    wr.task.cqe_wait.cq_count = cqe;
+
+    return ibv_exp_post_send(this->qp, &wr, &bad_wr);
+}
+
+int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr,
+                                        int count, uint32_t wr_id_start)
+{
+    if (count <= 0 || count > Consts::MaxPostWR)
+        return 0;
+
+    ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
+    ibv_sge sge[Consts::MaxPostWR];
+    for (int i = 0; i < count; ++i) {
+        sge[i].addr = reinterpret_cast<uintptr_t>(dst_arr[i]);
+        sge[i].length = size_arr[i];
+        sge[i].lkey = this->ctx->match_mr_lkey(dst_arr[i], size_arr[i]);
+    }
+
+    memset(wr, 0, sizeof(ibv_send_wr) * count);
+    for (int i = 0; i < count; ++i) {
+        wr[i].next = (i == count - 1 ? nullptr : wr + (i + 1));
+        wr[i].wr_id = wr_id_start + i;
+        wr[i].sg_list = sge + i;
+        wr[i].num_sge = 1;
+        wr[i].opcode = IBV_WR_RDMA_READ;
+        if (i == count - 1)
+            wr[i].send_flags = IBV_SEND_SIGNALED;
+        wr[i].wr.rdma.remote_addr = src_arr[i];
+        wr[i].wr.rdma.rkey = this->peer->match_remote_mr_rkey(src_arr[i], size_arr[i]);
+    }
+    return ibv_post_send(this->qp, wr, &bad_wr);
+}
+
+int ReliableConnection::post_batch_write(uintptr_t *dst_arr, void **src_arr, size_t *size_arr,
+                                         int count, uint32_t wr_id_start)
+{
+    if (count <= 0 || count > Consts::MaxPostWR)
+        return 0;
+
+    ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
+    ibv_sge sge[Consts::MaxPostWR];
+    for (int i = 0; i < count; ++i) {
+        sge[i].addr = reinterpret_cast<uintptr_t>(src_arr[i]);
+        sge[i].length = size_arr[i];
+        sge[i].lkey = this->ctx->match_mr_lkey(src_arr[i], size_arr[i]);
+    }
+
+    memset(wr, 0, sizeof(ibv_send_wr) * count);
+    for (int i = 0; i < count; ++i) {
+        wr[i].next = (i == count - 1 ? nullptr : wr + (i + 1));
+        wr[i].wr_id = wr_id_start + i;
+        wr[i].sg_list = sge + i;
+        wr[i].num_sge = 1;
+        wr[i].opcode = IBV_WR_RDMA_WRITE;
+        if (i == count - 1)
+            wr[i].send_flags = IBV_SEND_SIGNALED;
+        wr[i].wr.rdma.remote_addr = dst_arr[i];
+        wr[i].wr.rdma.rkey = this->peer->match_remote_mr_rkey(dst_arr[i], size_arr[i]);
+    }
+    return ibv_post_send(this->qp, wr, &bad_wr);
 }
 
 int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr,
