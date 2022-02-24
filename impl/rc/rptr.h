@@ -124,7 +124,7 @@ class rptr {
 
     /**
      * @brief Perform RDMA compare-and-swap. Cause the local buffer to become valid.
-     * Note that both arguments are passed-as-value, so `compare` will not be modified.
+     * Note that both arguments are passed-as-value.
      *
      * @param compare The value to be compared. Local buffer will be filled in with this value
      * first.
