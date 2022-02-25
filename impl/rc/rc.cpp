@@ -279,7 +279,7 @@ int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size
                                         int count, uint32_t wr_id_start)
 {
     if (count <= 0 || count > Consts::MaxPostWR)
-        return 0;
+        return -1;
 
     ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
@@ -308,7 +308,7 @@ int ReliableConnection::post_batch_write(uintptr_t *dst_arr, void **src_arr, siz
                                          int count, uint32_t wr_id_start)
 {
     if (count <= 0 || count > Consts::MaxPostWR)
-        return 0;
+        return -1;
 
     ibv_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
@@ -338,7 +338,7 @@ int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **
                                                      int count, uint32_t wr_id_start)
 {
     if (count <= 0 || count > Consts::MaxPostWR)
-        return 0;
+        return -1;
 
     ibv_exp_send_wr wr[Consts::MaxPostWR], *bad_wr;
     ibv_sge sge[Consts::MaxPostWR];
@@ -513,14 +513,16 @@ int ReliableConnection::create_qp(int qp_depth)
     init_attr.pd = this->ctx->pd;
     init_attr.comp_mask = IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS | IBV_EXP_QP_INIT_ATTR_PD |
                           IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
-    init_attr.exp_create_flags = IBV_EXP_QP_CREATE_EC_PARITY_EN;  // Enable EC
-    init_attr.max_atomic_arg = sizeof(uint64_t);                  // Enable extended atomics
+    init_attr.max_atomic_arg = sizeof(uint64_t);  // Enable extended atomics
     init_attr.cap.max_send_wr = qp_depth;
     init_attr.cap.max_recv_wr = qp_depth;
+    init_attr.cap.max_inline_data = 0;
     init_attr.cap.max_send_sge = 16;
     init_attr.cap.max_recv_sge = 16;
 
     this->qp = ibv_exp_create_qp(this->ctx->ctx, &init_attr);
+    if (!this->qp)
+        Emergency::abort("cannot create QP: " + std::to_string(errno));
     return errno;
 }
 

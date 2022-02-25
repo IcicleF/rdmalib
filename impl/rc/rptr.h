@@ -166,14 +166,14 @@ class rptr {
                                         bool sync = true)
     {
         if constexpr (sizeof(real_object_type) == sizeof(uint64_t)) {
-            *(this->dereference()) = compare;
+            *(this->dereference()) = compare & compare_mask;
             rc->post_masked_atomic_cas(remote_ptr, local_ptr, compare_mask, exchange, exchange_mask,
                                        sync);
             if (sync) {
                 rc->poll_send_cq();
                 this->validate();
             }
-            return *(this->dereference()) == compare;
+            return (*(this->dereference()) & compare_mask) == (compare & compare_mask);
         }
         return false;
     }
