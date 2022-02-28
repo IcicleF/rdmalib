@@ -253,6 +253,7 @@ class ReliableConnection {
 
   private:
     explicit ReliableConnection(Peer &peer, int id);
+    explicit ReliableConnection(Peer &peer, int id, ibv_cq *send_cq, ibv_cq *recv_cq);
     ~ReliableConnection();
 
     int create_cq(ibv_cq **cq, int cq_depth = Consts::MaxQueueDepth);
@@ -270,9 +271,11 @@ class ReliableConnection {
     Cluster *cluster;
     Peer *peer;
     int id;
+
     ibv_qp *qp;
     ibv_cq *send_cq;
     ibv_cq *recv_cq;
+    bool cq_self;
 };
 
 }  // namespace rdma

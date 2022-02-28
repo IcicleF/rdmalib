@@ -15,16 +15,35 @@ ReliableConnection::ReliableConnection(Peer &peer, int id)
     this->id = id;
 
     // Create QP
+    this->cq_self = true;
     this->create_cq(&this->send_cq);
     this->create_cq(&this->recv_cq);
+    this->create_qp();
+}
+
+ReliableConnection::ReliableConnection(Peer &peer, int id, ibv_cq *send_cq, ibv_cq *recv_cq)
+{
+    this->ctx = peer.ctx;
+    this->ctx->refcnt.fetch_add(1);
+    this->cluster = peer.cluster;
+
+    this->peer = &peer;
+    this->id = id;
+
+    // Create QP
+    this->cq_self = false;
+    this->send_cq = send_cq;
+    this->recv_cq = recv_cq;
     this->create_qp();
 }
 
 ReliableConnection::~ReliableConnection()
 {
     ibv_destroy_qp(this->qp);
-    ibv_destroy_cq(this->send_cq);
-    ibv_destroy_cq(this->recv_cq);
+    if (this->cq_self) {
+        ibv_destroy_cq(this->send_cq);
+        ibv_destroy_cq(this->recv_cq);
+    }
 
     // Dereference the RDMA context
     this->ctx->refcnt.fetch_sub(1);

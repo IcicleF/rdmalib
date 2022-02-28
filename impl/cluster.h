@@ -41,7 +41,7 @@ class Cluster {
     ~Cluster();
 
     /**
-     * @brief Synchronize among all peers and establish full RDMA connections.
+     * @brief Synchronize among all peers and establish full RDMA RC/XRC connections.
      * No RPC wrappings are provided. In case of RPC needs, use eRPC instead.
      * This method is allowed to be called only once. Further attempts will
      * kill the process.
@@ -50,6 +50,17 @@ class Cluster {
      * @param num_xrc Number of RDMA XRC connection(s) to establish.
      */
     void establish(int num_rc = 1, int num_xrc = 0);
+
+    /**
+     * @brief Synchronize among all peers and establish full RDMA RC connections.
+     * Allow RC QPs to share CQs according to a user-specified policy.
+     *
+     * @param num_rc Number of RDMA RC connection(s) to establish.
+     * @param share_cq_with CQ-sharing policy. For 0 <= i < num_rc, -1 <= share_cq_with[i] <= i must
+     * hold. If the value is -1 or i, then independent CQs are created. Otherwise, it uses the CQs
+     * of QP no. share_cq_with[i].
+     */
+    void establish(int num_rc, int *share_cq_with);
 
     /**
      * @brief Synchronize among all peers with MPI_Barrier.

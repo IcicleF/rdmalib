@@ -111,6 +111,7 @@ class Peer {
     explicit Peer(Cluster &cluster, int id);
 
     void establish(int num_rc, int num_xrc);
+    void establish(int num_rc, int *share_cq_with);
 
     /**
      * @brief Match a given remote address range to MR and return its rkey.

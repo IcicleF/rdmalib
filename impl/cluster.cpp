@@ -72,6 +72,31 @@ void Cluster::establish(int num_rc, int num_xrc)
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
+void Cluster::establish(int num_rc, int *share_cq_with)
+{
+    if (num_rc <= 0) {
+        Emergency::abort("no connections to establish");
+    }
+
+    // Allow only once
+    bool _connected = false;
+    if (!this->connected.compare_exchange_strong(_connected, true))
+        return;
+
+    // Before proceeding, barrier to ensure all peers are ready
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // Establish connection
+    for (int i = 0; i < this->n; ++i) {
+        if (i == this->id)
+            continue;
+        this->peers[i]->establish(num_rc, share_cq_with);
+    }
+
+    // Now all connections has been established, barrier
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
 void Cluster::sync()
 {
     int rc = MPI_Barrier(MPI_COMM_WORLD);
