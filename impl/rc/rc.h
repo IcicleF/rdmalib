@@ -32,7 +32,7 @@ class ReliableConnection {
      * if `signaled` is true.
      * @return int The status code returned by `ibv_post_send` function.
      */
-    int post_read(void *dst, uintptr_t src, size_t size, bool signaled = false, uint32_t wr_id = 0);
+    int post_read(void *dst, uintptr_t src, size_t size, bool signaled = false, uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA one-sided WRITE verb to this QP.
@@ -50,7 +50,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_post_send` function.
      */
     int post_write(uintptr_t dst, void const *src, size_t size, bool signaled = false,
-                   uint32_t wr_id = 0);
+                   uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA two-sided SEND verb to this QP.
@@ -64,7 +64,7 @@ class ReliableConnection {
      * if `signaled` is true.
      * @return int The status code returned by `ibv_post_send` function.
      */
-    int post_send(void const *src, size_t size, bool signaled = false, uint32_t wr_id = 0);
+    int post_send(void const *src, size_t size, bool signaled = false, uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA two-sided RECV verb to this QP.
@@ -76,7 +76,7 @@ class ReliableConnection {
      * if `signaled` is true.
      * @return int The status code returned by `ibv_post_recv` function.
      */
-    int post_recv(void *dst, size_t size, uint32_t wr_id = 0);
+    int post_recv(void *dst, size_t size, uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA one-sided ATOMIC COMPARE-AND-SWAP (CAS) verb to this QP.
@@ -93,7 +93,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_post_send` function.
      */
     int post_atomic_cas(uintptr_t dst, void *compare, uint64_t swap, bool signaled = false,
-                        uint32_t wr_id = 0);
+                        uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA one-sided ATOMIC FETCH-AND-ADD (FAA) verb to this QP.
@@ -110,7 +110,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_post_send` function.
      */
     int post_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, bool signaled = false,
-                        uint32_t wr_id = 0);
+                        uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA experimental one-sided MASKED ATOMIC COMPARE-AND-SWAP (MASKED-CAS) verb to
@@ -130,7 +130,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_exp_post_send` function.
      */
     int post_masked_atomic_cas(uintptr_t dst, void *compare, uint64_t compare_mask, uint64_t swap,
-                               uint64_t swap_mask, bool signaled = false, uint32_t wr_id = 0);
+                               uint64_t swap_mask, bool signaled = false, uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA experimental one-sided MASKED ATOMIC FETCH-AND-ADD (MASKED-FAA) verb to this
@@ -153,7 +153,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_exp_post_send` function.
      */
     int post_field_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, int highest_bit = 63,
-                              int lowest_bit = 0, bool signaled = false, uint32_t wr_id = 0);
+                              int lowest_bit = 0, bool signaled = false, uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA experimental one-sided MASKED ATOMIC FETCH-AND-ADD (MASKED-FAA) verb to this
@@ -172,7 +172,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_exp_post_send` function.
      */
     int post_masked_atomic_faa(uintptr_t dst, void *fetch, uint64_t add, uint64_t boundary,
-                               bool signaled = false, uint32_t wr_id = 0);
+                               bool signaled = false, uint64_t wr_id = 0);
 
     /**
      * @brief Post RDMA experimental WAIT verb to this QP.
@@ -199,7 +199,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_post_send` function.
      */
     int post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr, int count,
-                        uint32_t wr_id_start = 0);
+                        uint64_t wr_id_start = 0);
 
     /**
      * @brief Post a batch of RDMA one-sided WRITE verbs to this QP.
@@ -215,7 +215,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_post_send` function.
      */
     int post_batch_write(uintptr_t *dst_arr, void **src_arr, size_t *size_arr, int count,
-                         uint32_t wr_id_start = 0);
+                         uint64_t wr_id_start = 0);
 
     /**
      * @brief Post a batch of RDMA experimental one-sided MASKED ATOMIC FETCH-AND-ADD (MASKED-FAA)
@@ -233,7 +233,7 @@ class ReliableConnection {
      * @return int The status code returned by `ibv_exp_post_send` function.
      */
     int post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr, uint64_t *add_arr,
-                                     uint64_t *boundary_arr, int count, uint32_t wr_id_start = 0);
+                                     uint64_t *boundary_arr, int count, uint64_t wr_id_start = 0);
 
     void fill_sge(ibv_sge *sge, void *addr, size_t length);
     int post_send(ibv_exp_send_wr *wr);

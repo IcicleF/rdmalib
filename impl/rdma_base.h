@@ -32,7 +32,7 @@ class Consts {
      * @brief Maximum number of allowed threads on each node.
      * rdmalib allows `MaxThread * MaxThread` RCs and `MaxThreads` XRCs per node.
      */
-    static const int MaxThreads = 16;
+    static const int MaxThreads = 32;
 
     /**
      * @brief Maximum number of outstanding WR/CQE of each QP/SRQ/CQ.
@@ -68,7 +68,8 @@ class Emergency {
         else
             fprintf(stderr, "[node %d] %s\n", rank, message.c_str());
 
-        exit(retval);
+        // exit(retval);
+        throw retval;
     }
 };
 
