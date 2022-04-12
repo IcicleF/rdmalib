@@ -295,7 +295,7 @@ int ReliableConnection::post_wait(ibv_cq *cq, int cqe, bool signaled)
 }
 
 int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr,
-                                        int count, uint64_t wr_id_start)
+                                        int count, uint64_t wr_id_start, bool signaled)
 {
     if (count <= 0 || count > Consts::MaxPostWR)
         return -1;
@@ -315,7 +315,7 @@ int ReliableConnection::post_batch_read(void **dst_arr, uintptr_t *src_arr, size
         wr[i].sg_list = sge + i;
         wr[i].num_sge = 1;
         wr[i].opcode = IBV_WR_RDMA_READ;
-        if (i == count - 1)
+        if (i == count - 1 && signaled)
             wr[i].send_flags = IBV_SEND_SIGNALED;
         wr[i].wr.rdma.remote_addr = src_arr[i];
         wr[i].wr.rdma.rkey = this->peer->match_remote_mr_rkey(src_arr[i], size_arr[i]);
@@ -354,7 +354,7 @@ int ReliableConnection::post_batch_write(uintptr_t *dst_arr, void **src_arr, siz
 
 int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr,
                                                      uint64_t *add_arr, uint64_t *boundary_arr,
-                                                     int count, uint64_t wr_id_start)
+                                                     int count, uint64_t wr_id_start, bool signaled)
 {
     if (count <= 0 || count > Consts::MaxPostWR)
         return -1;
@@ -381,7 +381,7 @@ int ReliableConnection::post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **
         wr[i].num_sge = 1;
         wr[i].exp_opcode = IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD;
         wr[i].exp_send_flags = IBV_EXP_SEND_EXT_ATOMIC_INLINE;
-        if (i == count - 1)
+        if (i == count - 1 && signaled)
             wr[i].exp_send_flags |= IBV_SEND_SIGNALED;
 
         wr[i].ext_op.masked_atomics.log_arg_sz = 3;  // log(sizeof(uint64_t))
@@ -425,9 +425,9 @@ int ReliableConnection::poll_send_cq(int n)
         while (m > res) {
             res += ibv_poll_cq(this->send_cq, m - res, wc_arr + res);
         }
-        for (int j = 0; j < m; ++j)
-            if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-                Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
+        // for (int j = 0; j < m; ++j)
+        //     if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
+        //         Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     }
     return n;
 }
@@ -438,18 +438,18 @@ int ReliableConnection::poll_send_cq(ibv_wc *wc_arr, int n)
     while (n > res) {
         res += ibv_poll_cq(this->send_cq, n - res, wc_arr + res);
     }
-    for (int j = 0; j < n; ++j)
-        if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-            Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
+    // for (int j = 0; j < n; ++j)
+    //     if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
+    //         Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     return res;
 }
 
 int ReliableConnection::poll_send_cq_once(ibv_wc *wc_arr, int n)
 {
     int res = ibv_poll_cq(this->send_cq, n, wc_arr);
-    for (int j = 0; j < res; ++j)
-        if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
-            Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
+    // for (int j = 0; j < res; ++j)
+    //     if (__glibc_unlikely(wc_arr[j].status != IBV_WC_SUCCESS))
+    //         Emergency::abort("wc failure: " + std::to_string(wc_arr[j].status));
     return res;
 }
 

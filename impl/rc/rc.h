@@ -196,10 +196,12 @@ class ReliableConnection {
      * @param count Number of READ verbs to post.
      * @param wr_id_start The work request ID of the first READ. Each following READ will be
      * assigned an incremented ID.
+     * @param signaled If true, this request will generate ONE completion event in the CQ which must
+     * be later polled.
      * @return int The status code returned by `ibv_post_send` function.
      */
     int post_batch_read(void **dst_arr, uintptr_t *src_arr, size_t *size_arr, int count,
-                        uint64_t wr_id_start = 0);
+                        uint64_t wr_id_start = 0, bool signaled = true);
 
     /**
      * @brief Post a batch of RDMA one-sided WRITE verbs to this QP.
@@ -230,10 +232,13 @@ class ReliableConnection {
      * @param count Number of MASKED-FAA verbs to post.
      * @param wr_id_start The work request ID of the first WRITE. Each following WRITE will be
      * assigned an incremented ID.
+     * @param signaled If true, this request will generate ONE completion event in the CQ which must
+     * be later polled.
      * @return int The status code returned by `ibv_exp_post_send` function.
      */
     int post_batch_masked_atomic_faa(uintptr_t *dst_arr, void **fetch_arr, uint64_t *add_arr,
-                                     uint64_t *boundary_arr, int count, uint64_t wr_id_start = 0);
+                                     uint64_t *boundary_arr, int count, uint64_t wr_id_start = 0,
+                                     bool signaled = true);
 
     void fill_sge(ibv_sge *sge, void *addr, size_t length);
     int post_send(ibv_exp_send_wr *wr);
